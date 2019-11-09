@@ -319,7 +319,7 @@ CD /d "%prog_dir%"
 %pycommand% "%nut%" -lib_call listmanager filter_list "%prog_dir%zzlist.txt","ext=nsp xci","token=False",Print="False"
 for /f "tokens=*" %%f in (zzlist.txt) do (
 
-%pycommand% "%nut%" %buffer% -o "%fold_output%" -tfile "%prog_dir%zzlist.txt" --compress "%level%" --threads "%workers%" --nodelta "%skdelta%" --fexport "%xci_export%"
+%pycommand% "%nut%" %buffer% -o "%%~f" -tfile "%prog_dir%zzlist.txt" --compress "%level%" --threads "%workers%" --nodelta "%skdelta%" --fexport "%xci_export%"
 REM %pycommand% "%nut%" %buffer% -o "%fold_output%" -tfile "%prog_dir%zzlist.txt" --compress "%level%" --threads "%workers%" --nodelta "%skdelta%" --pararell "true" 
 
 %pycommand% "%nut%" --strip_lines "%prog_dir%zzlist.txt"
