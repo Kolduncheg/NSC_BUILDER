@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
 		# REPACK
 		parser.add_argument('-c', '--create', help='create / pack a NSP')
-		parser.add_argument('-cpr', '--compress', help='Compress a nsp or xci')
+		parser.add_argument('-cpr', '--compress', nargs='+', help='Compress a nsp or xci')
 		parser.add_argument('-dcpr', '--decompress', help='deCompress a nsz, xcz or ncz')
 		parser.add_argument('--create_hfs0', help='create / pack a hfs0')
 		parser.add_argument('--create_rhfs0', help='create / pack a root hfs0')
@@ -237,6 +237,8 @@ if __name__ == '__main__':
 		parser.add_argument('-uin', '--userinput', help='Reads a user input')
 		parser.add_argument('-incxml', '--includexml', nargs='+', help='Include xml by default true')
 		parser.add_argument('-trans', '--translate', nargs='+', help='Google translation support for nutdb descriptions')
+		parser.add_argument('-nodcr', '--nodecompress', help="Don't decompress nsz_xcz in several modes")	
+		
 		# LISTMANAGER
 		parser.add_argument('-cl', '--change_line', help='Change line in text file')
 		parser.add_argument('-rl', '--read_line', help='Read line in text file')
@@ -281,6 +283,12 @@ if __name__ == '__main__':
 		parser.add_argument('-threads','--threads', help="Number threads to use for certain functions")
 		parser.add_argument('-pararell','--pararell', help="Number threads to use for certain functions")		
 		parser.add_argument('-lib_call','--library_call', nargs='+',  help="Call a library function within squirrel")
+		parser.add_argument('-loop','--loop', nargs='+', help="Loop the text file using secondary module")
+		
+		# Hidden
+		parser.add_argument('-pos','--position', help=argparse.SUPPRESS)#tqdm position, aux argument for pararell	
+		parser.add_argument('-ninst','--n_instances', help=argparse.SUPPRESS)#number of instances, aux argument for pararell			
+		parser.add_argument('-xarg','--explicit_argument', nargs='+', help=argparse.SUPPRESS)#Explicit	arguments for lib_call for files with ","			
 		args = parser.parse_args()
 
 		Status.start()
@@ -288,10 +296,18 @@ if __name__ == '__main__':
 		indent = 1
 		tabs = '\t' * indent
 		trans=False
-
+		if args.file==list():
+			args.file=None
+			
 		if args.library_call:
+			if (args.library_call[0]).startswith('Drive.'):
+				sys.path.insert(0, 'Drive')
+				args.library_call[0]=str(args.library_call[0]).replace("Drive.", "")
 			import secondary
-			vret=secondary.call_library(args.library_call)
+			if args.explicit_argument:
+				vret=secondary.call_library(args.library_call,args.explicit_argument)
+			else:
+				vret=secondary.call_library(args.library_call)
 			Status.close()
 
 		if args.threads and not args.compress and not args.decompress:
@@ -311,11 +327,57 @@ if __name__ == '__main__':
 			import secondary
 			instances=2
 			if args.pararell=='true':
+				args.pararell=None
 				try:
 					instances=int(args.threads)
+					if instances<= 0:
+						instances=1
 				except:	
 					instances=2
-				secondary.route(args,instances)
+				args.threads=0	
+				items=secondary.pararell(args,instances)
+				if items==0:
+					try:
+						os.remove(args.text_file)
+					except:
+						pass						
+					for attr in vars(args):
+						setattr(args,attr,None)	
+						
+		if args.loop and args.ifolder:							
+			if args.loop[0]!='true' and args.loop[0]!='false' and args.text_file!='false':
+				if os.path.exists(args.text_file):
+					try:
+						os.remove(args.text_file)
+					except:
+						pass				
+				import secondary
+				args0=args
+				args0.type=args0.loop
+				args0.loop=None
+				args0.findfile=args0.ifolder
+				args0.ifolder=None
+				secondary.pass_command(args0)
+				args.ifolder=None
+				args.findfile=None
+				loop=list()
+				loop.append('true')
+				args.loop=loop
+				
+		if args.loop and args.text_file:		
+			if str(args.loop[0]).lower()=='true':	
+				import secondary
+				args.loop=None
+				items=secondary.pass_command(args)
+				if items==0:
+					try:
+						os.remove(args.text_file)
+					except:
+						pass					
+					for attr in vars(args):
+						setattr(args,attr,None)				
+			else:
+				args.loop=None 
 						
 # NCA/NSP IDENTIFICATION
 		# ..................................................
@@ -2571,6 +2633,20 @@ if __name__ == '__main__':
 
 		# parser.add_argument('-cpr', '--compress', help='Compress a nsp or xci')
 		if args.compress:
+			if args.position:
+				try:
+					position=int(args.position)
+				except:
+					position=False
+			else:
+				position=False				
+			if args.n_instances:
+				try:
+					n_instances=int(args.n_instances)
+				except:
+					n_instances=False
+			else:
+				n_instances=False								
 			if args.nodelta:
 				for input in args.nodelta:
 					try:
@@ -2581,7 +2657,9 @@ if __name__ == '__main__':
 						else:
 							delta=False
 					except BaseException as e:
-						Print.error('Exception: ' + str(e))		
+						Print.error('Exception: ' + str(e))	
+			else:
+				delta=False
 			if args.fexport:
 				for input in args.fexport:
 					try:
@@ -2599,8 +2677,6 @@ if __name__ == '__main__':
 				for input in args.ofolder:
 					try:
 						ofolder = input
-						ofolder = Path(ofolder)
-						ofolder = ofolder.parents[0]
 					except BaseException as e:
 						Print.error('Exception: ' + str(e))	
 			else:
@@ -2664,13 +2740,13 @@ if __name__ == '__main__':
 					except:
 						level=17
 					if filepath.endswith(".nsp"): 	
-						compressor.compress(filepath,ofolder,level,workers,delta)
+						compressor.compress(filepath,ofolder,level,workers,delta,pos=position,nthreads=n_instances)
 					elif filepath.endswith(".xci"):	
 						basename=os.path.basename(os.path.abspath(filepath))
 						if xci_exp=='nsz':
 							outfile=basename[:-3]+'nsz'
 							outfile =os.path.join(ofolder,outfile)	
-							nszPath=compressor.xci_to_nsz(filepath,buffer=65536,outfile=outfile,keepupd=False,level = level, threads = workers)												
+							nszPath=compressor.xci_to_nsz(filepath,buffer=65536,outfile=outfile,keepupd=False,level = level, threads = workers,pos=position,nthreads=n_instances)												
 							try:
 								f=Fs.Nsp(nszPath,'rb+')
 								f.seteshop()
@@ -2680,7 +2756,7 @@ if __name__ == '__main__':
 						else:	
 							outfile=basename[:-3]+'xcz'
 							outfile =os.path.join(ofolder,outfile)							
-							compressor.supertrim_xci(filepath,buffer=65536,outfile=outfile,keepupd=False,level = level, threads = workers)						
+							compressor.supertrim_xci(filepath,buffer=65536,outfile=outfile,keepupd=False,level = level, threads = workers,pos=position,nthreads=n_instances)						
 
 		# parser.add_argument('-dcpr', '--decompress', help='deCompress a nsz, xcz or ncz')
 		if args.decompress:
@@ -2918,6 +2994,13 @@ if __name__ == '__main__':
 					keepupd=False
 			except:
 				keepupd=False
+			try:
+				if str(args.nodecompress).lower() == "true":
+					nodecompress=True
+				else:
+					nodecompress=False
+			except:
+				nodecompress=True				
 			if args.buffer:
 				for input in args.buffer:
 					try:
@@ -2926,6 +3009,14 @@ if __name__ == '__main__':
 						Print.error('Exception: ' + str(e))
 			else:
 				buffer = 65536
+			if args.text_file:
+				tfile=args.text_file
+				with open(tfile,"r+", encoding='utf8') as filelist:
+					filepath = filelist.readline()
+					filepath=os.path.abspath(filepath.rstrip('\n'))
+			else:
+				if args.xci_super_trim[0] !="":
+					filepath=args.xci_super_trim[0]
 			if args.ofolder:
 				for input in args.ofolder:
 					try:
@@ -2933,18 +3024,8 @@ if __name__ == '__main__':
 					except BaseException as e:
 						Print.error('Exception: ' + str(e))
 			else:
-				if args.text_file:
-					tfile=args.text_file
-					with open(tfile,"r+", encoding='utf8') as filelist:
-						filename = filelist.readline()
-						filename=os.path.abspath(filename.rstrip('\n'))
-						dir=os.path.dirname(os.path.abspath(filename))
-						ofolder =os.path.join(dir, 'output')
-				else:
-					if args.xci_super_trim[0] !="":
-						filename=args.xci_super_trim[0]
-						dir=os.path.dirname(os.path.abspath(filename))
-						ofolder =os.path.join(dir, 'output')
+				dir=os.path.dirname(os.path.abspath(filepath))
+				ofolder =os.path.join(dir, 'output')		
 			if args.fat:
 				for input in args.fat:
 					try:
@@ -2956,20 +3037,26 @@ if __name__ == '__main__':
 						Print.error('Exception: ' + str(e))
 			else:
 				fat="exfat"
-			for filepath in args.xci_super_trim:
-				if filepath.endswith('.xci'):
-					try:
-						f = Fs.factory(filepath)
-						filename=os.path.basename(os.path.abspath(filepath))
-						#print(filename)
-						outfile = os.path.join(ofolder, filename)
-						#print(f.path)
-						f.open(filepath, 'rb')
-						f.supertrim(buffer,outfile,ofolder,fat,keepupd)
-						f.flush()
-						f.close()
-					except BaseException as e:
-						Print.error('Exception: ' + str(e))
+			if filepath.endswith('.xci'):
+				try:
+					f = Fs.factory(filepath)
+					filename=os.path.basename(os.path.abspath(filepath))
+					#print(filename)
+					outfile = os.path.join(ofolder, filename)
+					#print(f.path)
+					f.open(filepath, 'rb')
+					f.supertrim(buffer,outfile,ofolder,fat,keepupd)
+					f.flush()
+					f.close()
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))
+			elif filepath.endswith('.xcz'):
+				f = Fs.Xci(filepath)
+				filename=os.path.basename(os.path.abspath(filepath))
+				outfile = os.path.join(ofolder, filename)
+				f.supertrim(buffer,outfile,ofolder,keepupd,nodecompress=True)
+				f.flush()
+				f.close()					
 			Status.close()
 		# ...................................................
 		# Normal trimming for xci files
@@ -3988,7 +4075,7 @@ if __name__ == '__main__':
 						else:
 							endname=str(f)
 				endname = (re.sub(r'[\/\\\:\*\?]+', '', endname))
-				endname = re.sub(r'[™©®`~^´ªº¢£€¥$ƒ±¬½¼«»±•²‰œæÆ³☆<<>>|]', '', endname)
+				endname = re.sub(r'[™©®`~^´ªº¢#£€¥$ƒ±¬½¼♡«»±•²‰œæÆ³☆<<>>|]', '', endname)
 				endname = re.sub(r'[Ⅰ]', 'I', endname);endname = re.sub(r'[Ⅱ]', 'II', endname)
 				endname = re.sub(r'[Ⅲ]', 'III', endname);endname = re.sub(r'[Ⅳ]', 'IV', endname)
 				endname = re.sub(r'[Ⅴ]', 'V', endname);endname = re.sub(r'[Ⅵ]', 'VI', endname)
@@ -3997,6 +4084,7 @@ if __name__ == '__main__':
 				endname = re.sub(r'[Ⅺ]', 'XI', endname);endname = re.sub(r'[Ⅻ]', 'XII', endname)
 				endname = re.sub(r'[Ⅼ]', 'L', endname);endname = re.sub(r'[Ⅽ]', 'C', endname)
 				endname = re.sub(r'[Ⅾ]', 'D', endname);endname = re.sub(r'[Ⅿ]', 'M', endname)
+				endname = re.sub(r'[—]', '-', endname);endname = re.sub(r'[√]', 'Root', endname)
 				endname = re.sub(r'[àâá@äå]', 'a', endname);endname = re.sub(r'[ÀÂÁÄÅ]', 'A', endname)
 				endname = re.sub(r'[èêéë]', 'e', endname);endname = re.sub(r'[ÈÊÉË]', 'E', endname)
 				endname = re.sub(r'[ìîíï]', 'i', endname);endname = re.sub(r'[ÌÎÍÏ]', 'I', endname)
@@ -4341,6 +4429,15 @@ if __name__ == '__main__':
 				else:
 					for filepath in args.direct_splitter:
 						filepath=filepath
+				try:
+					if str(args.nodecompress).lower() == "true":
+						nodecompress=True
+					else:
+						nodecompress=False
+				except:
+					nodecompress=False
+				if nodecompress==True:
+					fat="exfat"
 				if args.type:
 					for input in args.type:
 						if input == "xci" or input == "XCI":
@@ -4372,7 +4469,7 @@ if __name__ == '__main__':
 				if filepath.endswith(".nsp") or filepath.endswith('.nsz'):
 					try:
 						f = Fs.Nsp(filepath)
-						f.sp_groupncabyid(buffer,ofolder,fat,fx,export)
+						f.sp_groupncabyid(buffer,ofolder,fat,fx,export,nodecompress)
 						f.flush()
 						f.close()
 					except BaseException as e:
@@ -4380,7 +4477,7 @@ if __name__ == '__main__':
 				if filepath.endswith(".xci") or filepath.endswith('.xcz'):
 					try:
 						f = Fs.Xci(filepath)
-						f.sp_groupncabyid(buffer,ofolder,fat,fx,export)
+						f.sp_groupncabyid(buffer,ofolder,fat,fx,export,nodecompress)
 						f.flush()
 						f.close()
 					except BaseException as e:
@@ -5190,7 +5287,7 @@ if __name__ == '__main__':
 			test=filename.lower()
 			if test.endswith('.nsp') or test.endswith('.nsx') or test.endswith('.nsz'):
 				try:
-					files_list=sq_tools.ret_nsp_offsets(filename)
+					files_list=sq_tools.ret_nsp_offsets(filename,32)
 					for i in range(len(files_list)):
 						#print(files_list[i][0])
 						#print(files_list[i][1])
@@ -5234,7 +5331,7 @@ if __name__ == '__main__':
 					Print.error('Exception: ' + str(e))
 			elif test.endswith('.xci') or test.endswith('.xcz'):
 				try:
-					files_list=sq_tools.ret_xci_offsets(filename)
+					files_list=sq_tools.ret_xci_offsets(filename,32)
 					#print(files_list)
 					for i in range(len(files_list)):
 						#print(files_list[i][0])
@@ -5983,8 +6080,12 @@ if __name__ == '__main__':
 		if args.show_current_line:
 			if args.show_current_line[0]:
 				textfile=args.show_current_line[0]
+				try:
+					number=args.show_current_line[1]
+				except:
+					number=1
 			try:
-				listmanager.printcurrent(textfile)
+				listmanager.printcurrent(textfile,number)
 			except BaseException as e:
 				Print.error('Exception: ' + str(e))
 
@@ -6782,7 +6883,7 @@ if __name__ == '__main__':
 						endname=endname[:-1]
 					#endname = re.sub(r'[\/\\\:\*\?\"\<\>\|\.\s™©®()\~]+', ' ', endname)
 					endname = (re.sub(r'[\/\\\:\*\?]+', '', endname))
-					endname = re.sub(r'[™©®`~^´ªº¢£€¥$ƒ±¬½¼«»±•²‰œæÆ³☆<<>>|]', '', endname)
+					endname = re.sub(r'[™©®`~^´ªº¢#£€¥$ƒ±¬½¼♡«»±•²‰œæÆ³☆<<>>|]', '', endname)
 					endname = re.sub(r'[Ⅰ]', 'I', endname);endname = re.sub(r'[Ⅱ]', 'II', endname)
 					endname = re.sub(r'[Ⅲ]', 'III', endname);endname = re.sub(r'[Ⅳ]', 'IV', endname)
 					endname = re.sub(r'[Ⅴ]', 'V', endname);endname = re.sub(r'[Ⅵ]', 'VI', endname)
@@ -6791,6 +6892,7 @@ if __name__ == '__main__':
 					endname = re.sub(r'[Ⅺ]', 'XI', endname);endname = re.sub(r'[Ⅻ]', 'XII', endname)
 					endname = re.sub(r'[Ⅼ]', 'L', endname);endname = re.sub(r'[Ⅽ]', 'C', endname)
 					endname = re.sub(r'[Ⅾ]', 'D', endname);endname = re.sub(r'[Ⅿ]', 'M', endname)
+					endname = re.sub(r'[—]', '-', endname);endname = re.sub(r'[√]', 'Root', endname)
 					endname = re.sub(r'[àâá@äå]', 'a', endname);endname = re.sub(r'[ÀÂÁÄÅ]', 'A', endname)
 					endname = re.sub(r'[èêéë]', 'e', endname);endname = re.sub(r'[ÈÊÉË]', 'E', endname)
 					endname = re.sub(r'[ìîíï]', 'i', endname);endname = re.sub(r'[ÌÎÍÏ]', 'I', endname)
@@ -7065,7 +7167,7 @@ if __name__ == '__main__':
 				endname=converter.do(endname)
 				endname=endname[0].upper()+endname[1:]
 			endname = (re.sub(r'[\/\\\:\*\?]+', '', endname))
-			endname = re.sub(r'[™©®`~^´ªº¢£€¥$ƒ±¬½¼«»±•²‰œæÆ³☆<<>>|]', '', endname)
+			endname = re.sub(r'[™©®`~^´ªº¢#£€¥$ƒ±¬½¼♡«»±•²‰œæÆ³☆<<>>|]', '', endname)
 			endname = re.sub(r'[Ⅰ]', 'I', endname);endname = re.sub(r'[Ⅱ]', 'II', endname)
 			endname = re.sub(r'[Ⅲ]', 'III', endname);endname = re.sub(r'[Ⅳ]', 'IV', endname)
 			endname = re.sub(r'[Ⅴ]', 'V', endname);endname = re.sub(r'[Ⅵ]', 'VI', endname)
@@ -7074,6 +7176,7 @@ if __name__ == '__main__':
 			endname = re.sub(r'[Ⅺ]', 'XI', endname);endname = re.sub(r'[Ⅻ]', 'XII', endname)
 			endname = re.sub(r'[Ⅼ]', 'L', endname);endname = re.sub(r'[Ⅽ]', 'C', endname)
 			endname = re.sub(r'[Ⅾ]', 'D', endname);endname = re.sub(r'[Ⅿ]', 'M', endname)
+			endname = re.sub(r'[—]', '-', endname);endname = re.sub(r'[√]', 'Root', endname)
 			endname = re.sub(r'[àâá@äå]', 'a', endname);endname = re.sub(r'[ÀÂÁÄÅ]', 'A', endname)
 			endname = re.sub(r'[èêéë]', 'e', endname);endname = re.sub(r'[ÈÊÉË]', 'E', endname)
 			endname = re.sub(r'[ìîíï]', 'i', endname);endname = re.sub(r'[ÌÎÍÏ]', 'I', endname)
@@ -7114,10 +7217,10 @@ if __name__ == '__main__':
 		if not args.direct_multi and not args.fw_req and not args.renameftxt and not args.renamef and not args.Read_nacp and not args.addtodb and (args.sanitize or args.romanize):
 			if args.sanitize:
 				san=True; rom=False
-				route=args.sanitize
+				route=args.sanitize[0]
 			elif args.romanize:
 				san=True; rom=True
-				route=args.romanize
+				route=args.romanize[0]
 			else:
 				route=False
 			if route != False:
@@ -7192,7 +7295,7 @@ if __name__ == '__main__':
 							endname=endname[0].upper()+endname[1:]
 						if san == True:
 							endname = (re.sub(r'[\/\\\:\*\?]+', '', endname))
-							endname = re.sub(r'[™©®`~^´ªº¢£€¥$ƒ±¬½¼«»±•²‰œæÆ³☆<<>>|]', '', endname)
+							endname = re.sub(r'[™©®`~^´ªº¢#£€¥$ƒ±¬½¼♡«»±•²‰œæÆ³☆<<>>|]', '', endname)
 							endname = re.sub(r'[Ⅰ]', 'I', endname);endname = re.sub(r'[Ⅱ]', 'II', endname)
 							endname = re.sub(r'[Ⅲ]', 'III', endname);endname = re.sub(r'[Ⅳ]', 'IV', endname)
 							endname = re.sub(r'[Ⅴ]', 'V', endname);endname = re.sub(r'[Ⅵ]', 'VI', endname)
@@ -7201,6 +7304,7 @@ if __name__ == '__main__':
 							endname = re.sub(r'[Ⅺ]', 'XI', endname);endname = re.sub(r'[Ⅻ]', 'XII', endname)
 							endname = re.sub(r'[Ⅼ]', 'L', endname);endname = re.sub(r'[Ⅽ]', 'C', endname)
 							endname = re.sub(r'[Ⅾ]', 'D', endname);endname = re.sub(r'[Ⅿ]', 'M', endname)
+							endname = re.sub(r'[—]', '-', endname);endname = re.sub(r'[√]', 'Root', endname)
 							endname = re.sub(r'[àâá@äå]', 'a', endname);endname = re.sub(r'[ÀÂÁÄÅ]', 'A', endname)
 							endname = re.sub(r'[èêéë]', 'e', endname);endname = re.sub(r'[ÈÊÉË]', 'E', endname)
 							endname = re.sub(r'[ìîíï]', 'i', endname);endname = re.sub(r'[ÌÎÍÏ]', 'I', endname)
@@ -7221,6 +7325,8 @@ if __name__ == '__main__':
 							endname = endname.replace("[ (", "[(");endname = endname.replace(") ]", ")]")
 							endname = endname.replace("  ", " ")
 						except:pass
+						if endname[-5]==" ":
+							endname=endname[:-5]+endname[-4:]
 						newpath=os.path.join(dir,endname)
 						print('Old Filename: '+basename)
 						print('Filename: '+endname)
@@ -7393,6 +7499,8 @@ if __name__ == '__main__':
 						info='INFO'
 						subf='MASSVERIFY'
 						ofolder =os.path.join(dir,info)
+						if not os.path.exists(ofolder):
+							os.makedirs(ofolder)
 						ofolder =os.path.join(ofolder,subf)
 						if not os.path.exists(ofolder):
 							os.makedirs(ofolder)
@@ -7494,6 +7602,8 @@ if __name__ == '__main__':
 						info='INFO'
 						subf='MASSVERIFY'
 						ofolder =os.path.join(dir,info)
+						if not os.path.exists(ofolder):
+							os.makedirs(ofolder)
 						ofolder =os.path.join(ofolder,subf)
 						if not os.path.exists(ofolder):
 							os.makedirs(ofolder)
@@ -7589,6 +7699,8 @@ if __name__ == '__main__':
 						info='INFO'
 						subf='MASSVERIFY'
 						ofolder =os.path.join(dir,info)
+						if not os.path.exists(ofolder):
+							os.makedirs(ofolder)
 						ofolder =os.path.join(ofolder,subf)
 						if not os.path.exists(ofolder):
 							os.makedirs(ofolder)
@@ -7684,6 +7796,8 @@ if __name__ == '__main__':
 						info='INFO'
 						subf='MASSVERIFY'
 						ofolder =os.path.join(dir,info)
+						if not os.path.exists(ofolder):
+							os.makedirs(ofolder)
 						ofolder =os.path.join(ofolder,subf)
 						if not os.path.exists(ofolder):
 							os.makedirs(ofolder)
@@ -7759,6 +7873,8 @@ if __name__ == '__main__':
 						info='INFO'
 						subf='MASSVERIFY'
 						ofolder =os.path.join(dir,info)
+						if not os.path.exists(ofolder):
+							os.makedirs(ofolder)
 						ofolder =os.path.join(ofolder,subf)
 						if not os.path.exists(ofolder):
 							os.makedirs(ofolder)
@@ -7801,9 +7917,9 @@ if __name__ == '__main__':
 			print('- Calculating base-ids for:')
 			for filepath in filelist:
 				try:
-					if filepath.endswith('.nsp'):
+					if filepath.endswith('.nsp') or filepath.endswith('.nsz')  or filepath.endswith('.nsx') :
 						f = Fs.Nsp(filepath)
-					elif filepath.endswith('.xci'):
+					elif filepath.endswith('.xci') or filepath.endswith('.xcz') :
 						f = Fs.factory(filepath)
 						f.open(filepath, 'rb')
 					print(tabs+filepath)
@@ -7953,6 +8069,7 @@ if __name__ == '__main__':
 					ruta=ruta[1:]
 				extlist=list()
 				extlist.append('.nsp')
+				extlist.append('.nsz')				
 				if args.filter:
 					for f in args.filter:
 						filter=f
@@ -8144,6 +8261,7 @@ if __name__ == '__main__':
 					ruta=ruta[1:]
 				extlist=list()
 				extlist.append('.nsp')
+				extlist.append('.nsz')				
 				if args.filter:
 					for f in args.filter:
 						filter=f
@@ -8359,7 +8477,9 @@ if __name__ == '__main__':
 					ruta=ruta[1:]
 				extlist=list()
 				extlist.append('.nsp')
+				extlist.append('.nsz')				
 				extlist.append('.xci')
+				extlist.append('.xcz')				
 				if args.filter:
 					for f in args.filter:
 						filter=f
@@ -8642,7 +8762,9 @@ if __name__ == '__main__':
 					ruta=ruta[1:]
 				extlist=list()
 				extlist.append('.nsp')
+				extlist.append('.nsz')				
 				extlist.append('.xci')
+				extlist.append('.xcz')				
 				if args.filter:
 					for f in args.filter:
 						filter=f
@@ -8922,7 +9044,9 @@ if __name__ == '__main__':
 					ruta=ruta[1:]
 				extlist=list()
 				extlist.append('.nsp')
+				extlist.append('.nsz')				
 				extlist.append('.xci')
+				extlist.append('.xcz')				
 				if args.filter:
 					for f in args.filter:
 						filter=f
@@ -9220,7 +9344,9 @@ if __name__ == '__main__':
 					ruta=ruta[1:]
 				extlist=list()
 				extlist.append('.nsp')
+				extlist.append('.nsz')				
 				extlist.append('.xci')
+				extlist.append('.xcz')				
 				if args.filter:
 					for f in args.filter:
 						filter=f
@@ -9511,7 +9637,9 @@ if __name__ == '__main__':
 						ruta=ruta[1:]
 					extlist=list()
 					extlist.append('.nsp')
+					extlist.append('.nsz')					
 					extlist.append('.xci')
+					extlist.append('.xcz')					
 					if args.filter:
 						for f in args.filter:
 							filter=f
@@ -9649,7 +9777,9 @@ if __name__ == '__main__':
 						ruta=ruta[1:]
 					extlist=list()
 					extlist.append('.nsp')
+					extlist.append('.nsz')					
 					extlist.append('.xci')
+					extlist.append('.xcz')					
 					if args.filter:
 						for f in args.filter:
 							filter=f

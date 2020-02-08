@@ -1,9 +1,11 @@
 import subprocess
 import os
+import sys
 import argparse
 import listmanager
 import Print
 import inspect
+from tqdm import tqdm
 
 # SET ENVIRONMENT
 squirrel_dir=os.path.abspath(os.curdir)
@@ -35,40 +37,85 @@ allowedlist=['--renamef','--addtodb','--addtodb_new','--verify','--compress']
 
 #print (squirrel)
 	
-def call_library(args):	
+def call_library(args,xarg=None):	
 	vret=None
-
 	try:
 		if args[0]:
-			library=args[0]
-			lib=__import__(library)
+			components = args[0].split('.')
+			if len(components)>1:
+				vret=call_class(args,xarg)
+				try:
+					if str(args[2]).lower() == 'print' or str(args[3]).lower() == 'print':
+						print(str(vret))
+					else:
+						print(str(vret))		
+				except:	
+					return 	vret				
+			else:
+				library=args[0]
+				lib=__import__(library)
 	except:pass	
 	
 	if len(args)>1:	
-		try:	
-			if args[2]:		
-				var=args[2]
+		if xarg==None:
+			try:	
+				if args[2]:		
+					var=args[2]
+					try:
+						var=var.split(',')	
+						for i in range(len(var)):
+							if str(var[i]).lower()=='true':
+								var[i]=True
+							elif str(var[i]).lower()=='false':
+								var[i]=False
+							elif str(var[i]).lower()=='none':
+								var[i]=None									
+							elif '=' in var[i]:
+								try:
+									asignation=var[i].split("=")
+									if str(asignation[1]).lower()=='true':
+										var[i]=True
+									elif str(asignation[1]).lower()=='false':	
+										var[i]=False
+									elif str(asignation[1]).lower()=='none':
+										var[i]=None												
+									else:
+										toks=list()
+										toks=[pos for pos, char in enumerate(var[i]) if char == '=']
+										indx=toks[0]+1
+										var[i]=(var[i])[indx:]
+								except:pass
+							else:pass
+					except:pass
+			except:	
+				var=None
+		else:
+			var=xarg
+			for i in range(len(var)):
 				try:
-					var=var.split(',')	
-					for i in range(len(var)):
-						if var[i]=='True':
-							var[i]=True
-						elif var[i]=='False':
-							var[i]=False					
-						elif '=' in var[i]:
-							try:
-								asignation=var[i].split("=")
-								if asignation[1]=='True':
-									var[i]=True
-								elif asignation[1]=='False':	
-									var[i]=False
-								else:
-									var[i]=asignation[1]
-							except:pass
-						else:pass
-				except:pass
-		except:	
-			var=None
+					if str(var[i]).lower()=='true':
+						var[i]=True
+					elif str(var[i]).lower()=='false':
+						var[i]=False
+					elif str(var[i]).lower()=='none':
+						var[i]=None									
+					elif '=' in var[i]:
+						try:
+							asignation=var[i].split("=")
+							if str(asignation[1]).lower()=='true':
+								var[i]=True
+							elif str(asignation[1]).lower()=='false':	
+								var[i]=False
+							elif str(asignation[1]).lower()=='none':
+								var[i]=None			
+							else:
+								toks=list()
+								toks=[pos for pos, char in enumerate(var[i]) if char == '=']
+								indx=toks[0]+1
+								var[i]=(var[i])[indx:]
+						except:pass
+					else:pass
+				except:pass	
 		try:	
 			if args[1]:
 				fimport=args[1]
@@ -86,8 +133,88 @@ def call_library(args):
 				print(str(vret))		
 		except:	
 			return 	vret
+			
+def call_class(args,xarg=None):			
+	vret=None
+	try:
+		if args[0]:
+			components = args[0].split('.')
+			library=components[0]
+			lib = __import__(library)
+			importedclass = getattr(lib, components[1])		
+	except:pass	
 
-	
+	if len(args)>1:	
+		if xarg==None:
+			try:	
+				if args[2]:		
+					var=args[2]
+					try:
+						var=var.split(',')	
+						for i in range(len(var)):
+							if str(var[i]).lower()=='true':
+								var[i]=True
+							elif str(var[i]).lower()=='false':
+								var[i]=False
+							elif str(var[i]).lower()=='none':
+								var[i]=None									
+							elif '=' in var[i]:
+								try:
+									asignation=var[i].split("=")
+									if str(asignation[1]).lower()=='true':
+										var[i]=True
+									elif str(asignation[1]).lower()=='false':	
+										var[i]=False
+									elif str(asignation[1]).lower()=='none':
+										var[i]=None												
+									else:
+										var[i]=asignation[1]
+								except:pass
+							else:pass
+					except:pass
+			except:	
+				var=None
+		else:
+			var=xarg
+			for i in range(len(var)):
+				try:
+					if str(var[i]).lower()=='true':
+						var[i]=True
+					elif str(var[i]).lower()=='false':
+						var[i]=False
+					elif str(var[i]).lower()=='none':
+						var[i]=None									
+					elif '=' in var[i]:
+						try:
+							asignation=var[i].split("=")
+							if str(asignation[1]).lower()=='true':
+								var[i]=True
+							elif str(asignation[1]).lower()=='false':	
+								var[i]=False
+							elif str(asignation[1]).lower()=='none':
+								var[i]=None			
+							else:
+								var[i]=asignation[1]
+						except:pass
+					else:pass
+				except:pass	
+		try:	
+			if args[1]:
+				fimport=args[1]
+				function = getattr(importedclass, fimport)
+				if var==None:
+					vret=function()
+				else:
+					vret=function(*var)					
+		except BaseException as e:
+			Print.error('Exception: ' + str(e))	
+		try:
+			if str(args[2]).lower() == 'print' or str(args[3]).lower() == 'print':
+				print(str(vret))
+			else:
+				print(str(vret))		
+		except:	
+			return 	vret
 	
 def route(args,workers):
 	arguments,tfile=getargs(args)
@@ -215,32 +342,220 @@ def route(args,workers):
 		listmanager.striplines(tfile,number=workers,counter=True)							
 
 	
-def getargs(args):
+def getargs(args,separate_list=True,current=False,pos=0,tothreads=1):
+
 	tfile=False
-	args=str(args)
-	args=args.split(', ')
+	# args=str(args)
+	# args=args.split(', ')
 	arguments=list()
 	if not isExe==True:
-		arguments.append("python")
+		arguments.append(sys.executable)
 	arguments.append(squirrel)
-	for a in args:
-		if not 'None' in a and a != 'file=[]' and not 'threads' in a and not 'pararell' in a:
-			a=a.split('=')
+	
+	if args.compress!=None and current!=False:
+		nargs=list()
+		args.text_file=None
+		f=None
+		f=current
+		nargs.append(f)		
+		nargs.append(args.compress[-1])	
+		args.compress=nargs
+		args.position=str(pos)
+		try:
+			tothreads=int(tothreads)
+			if tothreads>1:
+				args.n_instances=str(tothreads)
+		except:pass
+			
+	for a in vars(args):
+		if not 'None' in str(a) and str(a) != 'file=[]' and not 'threads' in str(a) and not 'pararell' in str(a):
+			# a=a.split('=')
 			# print(a)
-			try:
-				b=a[1]
-				b=b[1:-1]
-			except:
-				b=None
-				pass
-			if a[0]=='text_file':
+			# try:
+				# b=a[1]
+				# b=b[1:-1]
+			# except:
+				# b=None
+				# pass
+			b=getattr(args, a)
+			if isinstance(b, list):
+				c=0
+				for x in b:
+					if x=="" and c==0:
+						b=""
+						c+=1
+						break
+			# print(a)
+			# if a == 'type':
+				# print(b)
+			if a=='text_file' and separate_list==True:
 				tfile=b
 			else:
 				if b!=None:			
-					a='--'+a[0]
+					a='--'+a
 					arguments.append(a)
-					arguments.append(b)
-				else:
-					a=a[0]
-					arguments.append(a)					
+					if isinstance(b, list):
+						for x in b:
+							if x!='':
+								arguments.append(x)	
+						# narg=narg[:-1]
+						# arguments.append(narg)	
+						# print(narg)
+					else:
+						arguments.append(b)
 	return arguments,tfile		
+	
+def pass_command(args):	
+	c=0
+	if not args.findfile:
+		items=listmanager.counter(args.text_file)
+		process=list()
+		while items!=0:
+			if c==0:
+				c+=1
+			else:
+				print("")			
+			listmanager.printcurrent(args.text_file)
+			arguments,nonevar=getargs(args,separate_list=False)
+			# print(arguments)
+			process.append(subprocess.Popen(arguments))
+			for p in process: 	
+				p.wait()
+				# print(str(p.poll()))
+				while p.poll()==None:
+					if p.poll()!=None:
+						p.terminate();		
+			listmanager.striplines(args.text_file,number=1,counter=True)	
+			items-=1	
+		return items
+	else:
+		arguments,nonevar=getargs(args,separate_list=False)
+		# print(arguments)
+		process=list()
+		process.append(subprocess.Popen(arguments))
+		for p in process: 	
+			p.wait()
+			# print(str(p.poll()))
+			while p.poll()==None:
+				if p.poll()!=None:
+					p.terminate();				
+		return 0	
+
+def pararell(args,workers):	
+	from subprocess import call
+	from time import sleep
+	c=0;workers=int(workers);tfile=args.text_file;args0=args;f=False
+	filelist=listmanager.read_lines_to_list(tfile,all=True)
+	if not args.findfile:
+		items=listmanager.counter(args.text_file);index=0
+		process=list()
+		while items!=0:
+			if c==0:
+				c+=1
+			else:
+				#print("")
+				pass
+
+			from colorama import Fore	
+			colors=Fore.__dict__
+			p=0			
+			for r in range(workers):
+				if index != items:
+					k=0;l=p
+					for col in colors:
+						if l>len(colors):
+							l=l-len(colors)			
+						color=colors[col]
+						if k==(l+1):
+							break
+						else:
+							k+=1 	 					
+					#listmanager.printcurrent(tfile)
+					try:
+						f=filelist[index]
+					except:break
+					tq = tqdm(leave=False,position=0)
+					#tq = tqdm(leave=False,position=0,bar_format="{l_bar}%s{bar}%s{r_bar}" % (color, color))
+					tq.write('Opening thread for '+f)
+					tq.close() 	
+					tq = tqdm(total=1, unit='|', leave=True,position=0,bar_format="{l_bar}%s{bar}%s{r_bar}" % (color, Fore.RESET))
+					tq.update(1)
+					tq.close()  
+					opworkers=workers
+					if items<workers:
+						opworkers=items
+					arguments,nonevar=getargs(args,separate_list=False,current=f,pos=p,tothreads=opworkers)	
+					#print(arguments)				
+					f=False
+					args=args0
+					#print(arguments)
+					process.append(subprocess.Popen(arguments))				
+					index+=1
+					p+=1
+	
+			for pr in process: 	
+				#pr.wait()
+				#call('clear' if os.name =='posix' else 'cls') 				
+				# print(str(p.poll()))
+				while pr.poll()==None:
+					sleep(3)
+					if os.name =='posix':
+						call('clear')#linux
+					else:
+						try:
+							call('cls')#macos
+						except:
+							print ("\n" * 100)
+							os.system('cls')#windows
+					listmanager.counter(tfile,doprint=True)	
+					p=0;index2=index-workers
+					for r in range(workers):
+						if index2 != items:
+							k=0;l=p
+							for col in colors:
+								if l>len(colors):
+									l=l-len(colors)			
+								color=colors[col]
+								if k==(l+1):
+									break
+								else:
+									k+=1 	 					
+							#listmanager.printcurrent(tfile)
+							try:
+								f=filelist[index2]
+							except:break
+							tq = tqdm(leave=False,position=0)
+							# tq = tqdm(leave=False,position=0,bar_format="{l_bar}%s{bar}%s{r_bar}" % (color, color))
+							tq.write('Opening thread for '+f)
+							tq.close() 	
+							tq = tqdm(total=1, unit='|', leave=True,position=0,bar_format="{l_bar}%s{bar}%s{r_bar}" % (color, Fore.RESET))
+							tq.update(1)
+							tq.close()  
+							index2+=1;p+=1
+					if pr.poll()!=None:
+						pr.terminate();	
+			if os.name =='posix':
+				call('clear')#linux
+			else:
+				try:
+					call('cls')#macos
+				except:
+					os.system('cls')#windows	
+			listmanager.striplines(tfile,number=workers,counter=False)					
+			items-=workers	
+			if items<0:
+				items=0	
+		return items		 		
+
+
+def clear_Screen():
+	from subprocess import call
+	from time import sleep
+	if os.name =='posix':
+		call('clear')#linux
+	else:
+		try:
+			call('cls')#macos
+		except:
+			print ("\n" * 100)
+			os.system('cls')#windows

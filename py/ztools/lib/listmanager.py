@@ -31,20 +31,27 @@ def striplines(textfile,number=1,counter=False):
 		print('STILL '+str(c)+' FILES TO PROCESS')
 		print('...................................................')
 			
-def counter(textfile):
+def counter(textfile,doprint=False):	
 	counter=0
 	with open(textfile,'r', encoding='utf8') as f:
 		for line in f:
-			counter+=1	
+			counter+=1
+	if doprint!=False:			
+		print('...................................................')
+		print('STILL '+str(counter)+' FILES TO PROCESS')
+		print('...................................................') 		
 	return counter
 
 def printcurrent(textfile,number=1,counter=False):
 	currentline=''
+	number=int(number)
 	with open(textfile,'r', encoding='utf8') as f:
 		i=0
 		for line in f:
-			print(line)
-			break
+			i+=1
+			print(line.strip())
+			if i==number:
+				break
 			
 def read_lines_to_list(textfile,number=1,all=False):
 	#print(textfile)
@@ -298,6 +305,20 @@ def parsetags(filepath):
 def folder_to_list(ifolder,extlist=['nsp'],filter=False):	
 	ruta=ifolder
 	filelist=list()
+	if str(extlist)=='all' and os.path.isdir(ruta):
+		fname=""
+		binbin='RECYCLE.BIN'
+		for dirpath, dirnames, filenames in os.walk(ruta):
+			for filename in [f for f in filenames]:
+				fname=""
+				if filter != False:
+					if filter.lower() in filename.lower():
+						fname=filename
+				else:
+					fname=filename
+				if fname != "":
+					if binbin.lower() not in filename.lower():
+						filelist.append(os.path.join(dirpath, filename))		
 	try:
 		fname=""
 		binbin='RECYCLE.BIN'
@@ -306,6 +327,21 @@ def folder_to_list(ifolder,extlist=['nsp'],filter=False):
 			if os.path.isdir(ruta):
 				for dirpath, dirnames, filenames in os.walk(ruta):
 					for filename in [f for f in filenames if f.endswith(ext.lower()) or f.endswith(ext.upper()) or f[:-1].endswith(ext.lower()) or f[:-1].endswith(ext.lower())]:
+						try:
+							fname=""
+							if filter != False:
+								if filter.lower() in filename.lower():
+									fname=filename
+							else:
+								fname=filename
+							if fname != "":
+								if binbin.lower() not in filename.lower():
+									filelist.append(os.path.join(dirpath, filename))
+						except:pass			
+			else:
+				try:
+					if ruta.endswith(ext.lower()) or ruta.endswith(ext.upper()) or ruta[:-1].endswith(ext.lower()) or ruta[:-1].endswith(ext.upper()):
+						filename = ruta
 						fname=""
 						if filter != False:
 							if filter.lower() in filename.lower():
@@ -314,19 +350,8 @@ def folder_to_list(ifolder,extlist=['nsp'],filter=False):
 							fname=filename
 						if fname != "":
 							if binbin.lower() not in filename.lower():
-								filelist.append(os.path.join(dirpath, filename))
-			else:
-				if ruta.endswith(ext.lower()) or ruta.endswith(ext.upper()) or ruta[:-1].endswith(ext.lower()) or ruta[:-1].endswith(ext.upper()):
-					filename = ruta
-					fname=""
-					if filter != False:
-						if filter.lower() in filename.lower():
-							fname=filename
-					else:
-						fname=filename
-					if fname != "":
-						if binbin.lower() not in filename.lower():
-							filelist.append(filename)
+								filelist.append(filename)
+				except:pass			
 	except BaseException as e:
 		nutPrint.error('Exception: ' + str(e))													
 	return filelist
@@ -339,21 +364,27 @@ def selector2list(textfile,mode='folder',ext=False,filter=False,Print=False):
 	if mode=='file':
 		filepath = filedialog.askopenfilename()		
 	else:
-		filepath = filedialog.askdirectory()	
+		filepath = filedialog.askdirectory()
 	extlist=list()
 	if ext!=False:
 		if isinstance(ext, list):	
 			extlist=ext
 		else:
 			try:
+				if not ',' in ext:
+					ext=ext.split(' ')
+				else:
+					ext=ext.split(',')			
 				ext=ast.literal_eval(str(ext))
 				if isinstance(ext, list):	
 					extlist=ext
 				else:
-					extlist.append(ext)
+					extlist=ext.split(' ')
 			except:		
 				extlist.append(ext)	
-				
+	else:
+		extlist=['nsp','xci','nsx','xcz','nsz']
+		
 	ruta=filepath
 	filelist=list()
 	try:
@@ -361,6 +392,7 @@ def selector2list(textfile,mode='folder',ext=False,filter=False,Print=False):
 		binbin='RECYCLE.BIN'
 		if ext!=False:
 			for ext in extlist:
+				ext=ext.strip()
 				# print (ext)
 				if os.path.isdir(ruta):
 					for dirpath, dirnames, filenames in os.walk(ruta):
@@ -419,3 +451,62 @@ def selector2list(textfile,mode='folder',ext=False,filter=False,Print=False):
 	except BaseException as e:
 		nutPrint.error('Exception: ' + str(e))													
 	return filelist
+
+def size_sorted_from_json(jsonfile,tfile,first='small'):
+	dump={}
+	try:
+		import ujson as json
+	except:
+		import json
+	with open(jsonfile,'rt',encoding='utf8') as json_file:	
+		data = json.load(json_file)		
+		for dict in data:	
+			if 'Name' in dict and 'Size' in dict:
+				try:
+					dump[dict['Name']]=dict['Size']
+				except:pass		
+	if first=='big':
+		sortedlist = sorted(dump.items(), key=lambda x: x[1],reverse=True)
+	else:
+		sortedlist = sorted(dump.items(), key=lambda x: x[1],reverse=False)
+	with open(tfile,'wt',encoding='utf8') as tfile:	
+		for i in sortedlist:
+			tfile.write(i[0]+"\n")
+	print('- List was ordered by size')
+		
+def size_sorted_from_folder(ifolder,tfile,extlist=['nsp'],first='small'):	
+	filelist=folder_to_list(ifolder,extlist)
+	dump={}
+	for file in filelist:
+		size=os.path.getsize(file)
+		dump[file]=size
+	if first=='big':
+		sortedlist = sorted(dump.items(), key=lambda x: x[1],reverse=True)
+	else:
+		sortedlist = sorted(dump.items(), key=lambda x: x[1],reverse=False)	
+	with open(tfile,'wt',encoding='utf8') as tfile:	
+		for i in sortedlist:
+			tfile.write(i[0]+"\n")
+	print('- List ordered by size was created')
+	
+def size_sorted_from_tfile(itfile,otfile=None,first='small'):	
+	filelist=read_lines_to_list(itfile,all=True)
+	dump={}
+	for file in filelist:
+		size=os.path.getsize(file)
+		dump[file]=size
+	if first=='big':
+		sortedlist = sorted(dump.items(), key=lambda x: x[1],reverse=True)
+	else:
+		sortedlist = sorted(dump.items(), key=lambda x: x[1],reverse=False)
+	if otfile == None:
+		tfile=itfile
+	else:
+		tfile=otfile
+		ofolder=os.path.dirname(os.path.abspath(tfile))
+		if not os.path.exists(ofolder):
+			os.makedirs(ofolder)
+	with open(tfile,'wt',encoding='utf8') as tfile:	
+		for i in sortedlist:
+			tfile.write(i[0]+"\n")
+	print('- List was ordered by size')

@@ -2,7 +2,9 @@ import io
 import eel
 import sq_tools
 import Fs
-import sys;import platform
+import sys
+import platform
+import win32com.client 
 from base64 import b64encode
 import tkinter as tk
 from tkinter import filedialog
@@ -356,11 +358,11 @@ def getinfo(filename):
 	try:
 		send_.append(sq_tools.getSize(dict['GCSize']))	
 	except:send_.append('-')	
-	try:
+	try:#data[30]
 		x=get_screen_gallery(dict["bannerUrl"],dict["screenshots"])
 		send_.append(x)			
 	except:send_.append("Not available")
-	try:
+	try:#data[31]
 		RQversion=0
 		if str(dict['Type']).upper()=='DLC':
 			if int(RGV)>0:
@@ -368,7 +370,65 @@ def getinfo(filename):
 			else:
 				RQversion=str(RGV)+" -> Application ({})".format(str(RS_number))
 		send_.append(RQversion)		
-	except:send_.append('-')		
+	except:send_.append('-')
+	###NEW JSON STUFF###
+	try:#data[32]			
+		send_.append(dict['developer'])	
+	except:send_.append('-')
+	try:#data[33]			
+		send_.append(dict['productCode'])	
+	except:send_.append('-')
+	try:#data[34]
+		if str(dict['OnlinePlay']).lower()=="true":
+			send_.append("Yes")	
+		else:
+			send_.append("No")						
+	except:send_.append('No')
+	try:#data[35]			
+		if str(dict['SaveDataCloud']).lower()=="true":
+			send_.append("Yes")	
+		else:
+			send_.append("No")						
+	except:send_.append('No')
+	try:#data[36]			
+		playmodes=str((', '.join(dict['playmodes'])))
+		send_.append(playmodes)	
+	except:send_.append('-')
+	try:#data[37]	
+		if str(dict['metascore']).lower()=='false':
+			send_.append('-')
+		else:	
+			send_.append(dict['metascore'])	
+	except:send_.append('-')
+	try:#data[38]			
+		if str(dict['userscore']).lower()=='false':
+			send_.append('-')
+		else:		
+			send_.append(dict['userscore'])	
+	except:send_.append('-')
+	try:#data[39]
+		FWoncard=dict['FWoncard']
+		FWoncard=str(FWoncard).strip("'")
+		send_.append(FWoncard)	
+	except:send_.append('-')
+	try:#data[40]		
+		if str(enablevideoplayback).lower() == 'true':
+			video=dict['video']	
+			video=ast.literal_eval(str(video))
+			video=video[0]
+			send_.append(str(video))	
+		else:
+			send_.append('-')
+	except:send_.append('-')	
+	try:#data[41]			
+		if str(dict['openscore']).lower()=='false':
+			send_.append('-')
+		else:
+			if dict['openscore'] != dict['metascore']:
+				send_.append(dict['openscore'])	
+			else:
+				send_.append('-')
+	except:send_.append('-')	
 	f.flush()
 	f.close()			
 	return send_
@@ -385,23 +445,27 @@ def getfiletree(ID):
 def getcheats(ID):
 	print('* Seeking cheats from DB')
 	feed=''
-	cheatID_list=nutdb.get_content_cheats(ID)	
-	feed=html_feed(feed,1,message=str('LIST OF CHEATS: '))	
-	if len(cheatID_list)==0:
-		feed=html_feed(feed,2,message=str('- Cheats not found'))			
-	for i in range(len(cheatID_list)):
-		data=cheatID_list[i]
-		titleid=data[0];version=data[1];buildid=data[2]
-		message=[str(titleid+' v'+version+'. '+'BuildID: '+buildid),''];feed=html_feed(feed,3,message)		
-		cheats=data[3]
-		feed+='<div style="margin-left:2.6vh">'
-		for j in range(len(cheats)):
-			entry=cheats[j]
-			cheat_title=entry[0]
-			cheat_source=entry[1]
-			message=[cheat_title,""];feed=html_feed(feed,9,message)
-			feed=html_feed(feed,8,message=(cheat_source))
-		feed+='</div>'	
+	try:
+		cheatID_list=nutdb.get_content_cheats(ID)	
+		feed=html_feed(feed,1,message=str('LIST OF CHEATS: '))	
+		if len(cheatID_list)==0:
+			feed=html_feed(feed,2,message=str('- Cheats not found'))			
+		for i in range(len(cheatID_list)):
+			data=cheatID_list[i]
+			titleid=data[0];version=data[1];buildid=data[2]
+			message=[str(titleid+' v'+version+'. '+'BuildID: '+buildid),''];feed=html_feed(feed,3,message)		
+			cheats=data[3]
+			feed+='<div style="margin-left:2.6vh">'
+			for j in range(len(cheats)):
+				entry=cheats[j]
+				cheat_title=entry[0]
+				cheat_source=entry[1]
+				message=[cheat_title,""];feed=html_feed(feed,9,message)
+				feed=html_feed(feed,8,message=(cheat_source))
+			feed+='</div>'
+	except:
+			feed=html_feed(feed,1,message=str('LIST OF CHEATS: '))		
+			feed=html_feed(feed,2,message=str('- Cheats not found'))			
 	print('  DONE')		
 	return feed
 
@@ -491,7 +555,6 @@ def About():
 	print('                             /_____/                                                  ')
 	print('------------------------------------------------------------------------------------- ')
 	print('                        NINTENDO SWITCH CLEANER AND BUILDER                           ')
-	print('                               FILE_INFO ALPHA GUI                                    ')
 	print('------------------------------------------------------------------------------------- ')
 	print('=============================     BY JULESONTHEROAD     ============================= ')
 	print('------------------------------------------------------------------------------------- ')
@@ -501,39 +564,66 @@ def About():
 	print("Program's github: https://github.com/julesontheroad/NSC_BUILDER                       ")
 	print('Cheats and Eshop information from nutdb and http://tinfoil.io                         ')
 	print('------------------------------------------------------------------------------------- ')
-slimpath
-def start():
+
+def start(browserpath='auto',videoplayback=True,height=800,width=740):
+	global enablevideoplayback
+	enablevideoplayback=videoplayback
 	try:
-		if os.path.exists(chromiumpath):
+		if browserpath == 'default':
+			print("Launched using default system browser")
+			eel.start('main.html', mode='default', size=(height, width))				
+		elif browserpath != 'auto' and os.path.exists(browserpath) and not browserpath.endswith('.ink'):
+			eel.browsers.set_path('chrome', browserpath)
+			About()
+			print("Launched using: "+browserpath)
+			eel.start('main.html', mode='chrome', size=(height, width))
+		elif browserpath != 'auto' and browserpath.endswith('.lnk') and sys.platform in ['win32', 'win64']:
+			chrpath=os.path.join(ztools_dir,'chromium')
+			chrpath_alt=os.path.join(squirrel_dir,'chromium')
+			if not os.path.exists(browserpath) and os.path.exists(chrpath):
+				browserpath=os.path.join(chrpath,browserpath)
+			elif not os.path.exists(browserpath) and os.path.exists(chrpath_alt):
+				browserpath=os.path.join(chrpath_alt,browserpath)
+			elif not os.path.exists(browserpath):
+				print(".lnk file doesn't exist")
+				return False
+			shell = win32com.client.Dispatch("WScript.Shell")
+			browserpath = shell.CreateShortCut(browserpath)
+			browserpath=browserpath.Targetpath	
+			eel.browsers.set_path('chrome', browserpath)
+			About()
+			print("Launched using: "+browserpath)
+			eel.start('main.html', mode='chrome', size=(height, width))			
+		elif os.path.exists(chromiumpath):
 			eel.browsers.set_path('chrome', chromiumpath)
 			About()
 			print("Launched using: "+chromiumpath)
-			eel.start('main.html', mode='chrome', size=(800, 700))		
+			eel.start('main.html', mode='chrome', size=(height, width))		
 		elif os.path.exists(chromiumpath_alt):	
 			eel.browsers.set_path('chrome', chromiumpath_alt)
 			About()
 			print("Launched using: "+chromiumpath_alt)
-			eel.start('main.html', mode='chrome', size=(800, 700))		
-		if os.path.exists(slimpath):
+			eel.start('main.html', mode='chrome', size=(height, width))		
+		elif os.path.exists(slimpath):
 			eel.browsers.set_path('chrome', slimpath)
 			About()
 			print("Launched using: "+slimpath)
-			eel.start('main.html', mode='chrome', size=(800, 700))		
+			eel.start('main.html', mode='chrome', size=(height, width))		
 		elif os.path.exists(slimpath_alt):	
 			eel.browsers.set_path('chrome', slimpath_alt)
 			About()
 			print("Launched using: "+slimpath_alt)
-			eel.start('main.html', mode='chrome', size=(800, 700))						
+			eel.start('main.html', mode='chrome', size=(height, width))						
 		else:
 			try:
 				About()
 				print("Launched using Chrome Installation")
-				eel.start('main.html', mode='chrome', size=(800, 700))
+				eel.start('main.html', mode='chrome', size=(height, width))
 			except EnvironmentError:
 				print("Chrome wasn't detected. Launched using Windows Edge with limited compatibility")	
 				if sys.platform in ['win32', 'win64'] and int(platform.release()) >= 10:
 					# print(platform.release())
-					eel.start('main.html', mode='edge', size=(800, 700))
+					eel.start('main.html', mode='edge', size=(height, width))
 				else:
 					raise				
 	except (SystemExit, MemoryError, KeyboardInterrupt):	

@@ -4,7 +4,7 @@ set "prog_dir=%~dp0"
 set "bat_name=%~n0"
 set "ofile_name=%bat_name%_options.cmd"
 set "opt_interface=Interface_options.cmd"
-Title NSC_Builder v0.96 -- Profile: %ofile_name% -- by JulesOnTheRoad
+Title NSC_Builder v0.98 -- Profile: %ofile_name% -- by JulesOnTheRoad
 set "list_folder=%prog_dir%lists"
 ::-----------------------------------------------------
 ::EDIT THIS VARIABLE TO LINK OTHER OPTION FILE
@@ -736,6 +736,7 @@ echo Input "9"  to enter into FILE-RESTORATION mode
 REM echo Input "10" to enter into FILE-MANAGEMENT mode
 echo Input "0"  to enter into CONFIGURATION mode
 echo.
+echo Input "D" to enter GOOGLE DRIVE MODES
 echo Input "L" to enter LEGACY MODES
 echo .......................................................
 echo.
@@ -751,6 +752,7 @@ if /i "%bs%"=="7" goto JOINmode
 if /i "%bs%"=="8" goto ZSTDmode
 if /i "%bs%"=="9" goto RSTmode
 REM if /i "%bs%"=="10" goto MNGmode
+if /i "%bs%"=="D" goto DriveMode
 if /i "%bs%"=="L" goto LegacyMode
 if /i "%bs%"=="0" goto OPT_CONFIG
 goto manual_Reentry
@@ -772,6 +774,9 @@ call "%prog_dir%ztools\MNG.bat"
 goto manual_Reentry
 :LegacyMode
 call "%prog_dir%ztools\LEGACY.bat"
+goto manual_Reentry
+:DriveMode
+call "%prog_dir%ztools\DriveMode.bat"
 goto manual_Reentry
 REM //////////////////////////////////////////////////
 REM /////////////////////////////////////////////////
@@ -848,8 +853,8 @@ setlocal enabledelayedexpansion
 echo+ >"%uinput%"
 endlocal
 if /i "%eval%"=="0" goto manual_Reentry
-if /i "%eval%"=="1" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%list.txt",mode=folder,ext=nsp xci nsz nsx xcz ) 2>&1>NUL
-if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%list.txt",mode=file,ext=nsp xci nsz nsx xcz )  2>&1>NUL
+if /i "%eval%"=="1" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%list.txt" mode=folder ext="nsp xci nsz nsx xcz" ) 2>&1>NUL
+if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%list.txt" mode=file ext="nsp xci nsz nsx xcz" ) 2>&1>NUL  
 goto checkagain
 echo.
 :checkagain
@@ -878,8 +883,8 @@ endlocal
 
 if /i "%eval%"=="0" goto manual_Reentry
 if /i "%eval%"=="1" goto start_cleaning
-if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%list.txt",mode=folder,ext=nsp xci nsz nsx xcz ) 2>&1>NUL
-if /i "%eval%"=="3" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%list.txt",mode=file,ext=nsp xci nsz nsx xcz )  2>&1>NUL
+if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg  "%prog_dir%list.txt" mode=folder ext="nsp xci nsz nsx xcz" ) 2>&1>NUL
+if /i "%eval%"=="3" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg  "%prog_dir%list.txt" mode=file ext="nsp xci nsz nsx xcz" )  2>&1>NUL
 if /i "%eval%"=="e" goto salida
 if /i "%eval%"=="i" goto showlist
 if /i "%eval%"=="r" goto r_files
@@ -1028,7 +1033,8 @@ echo Input "6" to change top keygeneration to 6 (FW 6.0.0-6.1.0)
 echo Input "7" to change top keygeneration to 7 (FW 6.2.0)
 echo Input "8" to change top keygeneration to 8 (FW 7.0.0-8.0.1)
 echo Input "9" to change top keygeneration to 9 (FW 8.1.0)
-echo Input "10" to change top keygeneration to 10 (FW 9.0.0)
+echo Input "10" to change top keygeneration to 10 (FW 9.0.0-9.01)
+echo Input "11" to change top keygeneration to 11 (FW 9.1.0)
 echo.
 ECHO ******************************************
 echo Or Input "b" to return to the list options
@@ -1061,6 +1067,8 @@ if /i "%bs%"=="9" set "vkey=-kp 9"
 if /i "%bs%"=="9" set "capRSV=--RSVcap 537919488"
 if /i "%bs%"=="10" set "vkey=-kp 10"
 if /i "%bs%"=="10" set "capRSV=--RSVcap 603979776"
+if /i "%bs%"=="11" set "vkey=-kp 11"
+if /i "%bs%"=="11" set "capRSV=--RSVcap 605028352"
 if /i "%vkey%"=="none" echo WRONG CHOICE
 if /i "%vkey%"=="none" goto s_KeyChange_wrongchoice
 goto s_KeyChange_skip
@@ -1597,8 +1605,9 @@ endlocal
 if /i "%eval%"=="0" goto manual_Reentry
 if /i "%eval%"=="1" set skip_list_split="true"
 if /i "%eval%"=="1" goto multi_start_cleaning
-if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%mlist.txt",mode=folder,ext=nsp xci nsz xcz ) 2>&1>NUL
-if /i "%eval%"=="3" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%mlist.txt",mode=file,ext=nsp xci nsz xcz )  2>&1>NUL
+if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%mlist.txt" mode=folder ext="nsp xci nsz xcz" ) 2>&1>NUL
+if /i "%eval%"=="3" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%mlist.txt" mode=file ext="nsp xci nsz xcz" ) 2>&1>NUL
+
 goto multi_checkagain
 echo.
 :multi_checkagain
@@ -1610,6 +1619,8 @@ echo.
 echo Input "1" to start processing current list
 echo Input "2" to add to saved lists and process them
 echo Input "3" to save list for later
+echo Input "4" to add another folder to list via selector
+echo Input "5" to add another file to list via selector
 REM echo Input "2" to set a custom logo from a nsp/nca
 echo.
 echo Input "e" to exit
@@ -1635,8 +1646,8 @@ if /i "%eval%"=="2" set "mlistfol=%list_folder%\m_multi"
 if /i "%eval%"=="2" goto multi_start_cleaning
 if /i "%eval%"=="3" set "mlistfol=%list_folder%\m_multi"
 if /i "%eval%"=="3" goto multi_saved_for_later
-if /i "%eval%"=="4" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%mlist.txt",mode=folder,ext=nsp xci nsz xcz ) 2>&1>NUL
-if /i "%eval%"=="5" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%mlist.txt",mode=file,ext=nsp xci nsz xcz )  2>&1>NUL
+if /i "%eval%"=="4" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%mlist.txt" mode=folder ext="nsp xci nsz xcz" ) 2>&1>NUL
+if /i "%eval%"=="5" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%mlist.txt" mode=file ext="nsp xci nsz xcz" ) 2>&1>NUL
 REM if /i "%eval%"=="2" goto multi_set_clogo
 if /i "%eval%"=="e" goto salida
 if /i "%eval%"=="i" goto multi_showlist
@@ -1833,7 +1844,8 @@ echo Input "6" to change top keygeneration to 6 (FW 6.0.0-6.1.0)
 echo Input "7" to change top keygeneration to 7 (FW 6.2.0)
 echo Input "8" to change top keygeneration to 8 (FW 7.0.0-8.0.1)
 echo Input "9" to change top keygeneration to 9 (FW 8.1.0)
-echo Input "10" to change top keygeneration to 10 (FW 9.0.0)
+echo Input "10" to change top keygeneration to 10 (FW 9.0.0-9.01)
+echo Input "11" to change top keygeneration to 11 (FW 9.1.0)
 echo.
 ECHO *****************************************
 echo Or Input "b" to return to the option list
@@ -1866,6 +1878,8 @@ if /i "%bs%"=="9" set "vkey=-kp 9"
 if /i "%bs%"=="9" set "capRSV=--RSVcap 537919488"
 if /i "%bs%"=="10" set "vkey=-kp 10"
 if /i "%bs%"=="10" set "capRSV=--RSVcap 603979776"
+if /i "%bs%"=="11" set "vkey=-kp 11"
+if /i "%bs%"=="11" set "capRSV=--RSVcap 605028352"
 if /i "%vkey%"=="none" echo WRONG CHOICE
 if /i "%vkey%"=="none" goto m_KeyChange_wrongchoice
 
@@ -2341,8 +2355,8 @@ echo+ >"%uinput%"
 endlocal
 
 if /i "%eval%"=="0" goto manual_Reentry
-if /i "%eval%"=="1" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%splist.txt",mode=folder,ext=nsp xci nsz xcz ) 2>&1>NUL
-if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%splist.txt",mode=file,ext=nsp xci nsz xcz )  2>&1>NUL
+if /i "%eval%"=="1" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%splist.txt" mode=folder ext="nsp xci nsz xcz" ) 2>&1>NUL
+if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%splist.txt" mode=file ext="nsp xci nsz xcz" )  2>&1>NUL
 
 echo.
 :sp_checkagain
@@ -2371,8 +2385,9 @@ endlocal
 
 if /i "%eval%"=="0" goto manual_Reentry
 if /i "%eval%"=="1" goto sp_start_cleaning
-if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%splist.txt",mode=folder,ext=nsp xci nsz xcz ) 2>&1>NUL
-if /i "%eval%"=="3" ( %pycommand% "%nut%" -lib_call listmanager selector2list "%prog_dir%splist.txt",mode=file,ext=nsp xci nsz xcz )  2>&1>NUL
+if /i "%eval%"=="2" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%splist.txt" mode=folder ext="nsp xci nsz xcz" ) 2>&1>NUL
+if /i "%eval%"=="3" ( %pycommand% "%nut%" -lib_call listmanager selector2list -xarg "%prog_dir%splist.txt" mode=file ext="nsp xci nsz xcz" )  2>&1>NUL
+
 if /i "%eval%"=="e" goto salida
 if /i "%eval%"=="i" goto sp_showlist
 if /i "%eval%"=="r" goto sp_r_files
@@ -2945,7 +2960,7 @@ ECHO =============================     BY JULESONTHEROAD     ===================
 ECHO -------------------------------------------------------------------------------------
 ECHO "                                POWERED BY SQUIRREL                                "
 ECHO "                    BASED ON THE WORK OF BLAWAR AND LUCA FRAGA                     "
-ECHO                                   VERSION 0.96 (NEW)
+ECHO                                  VERSION 0.98 (NEW)
 ECHO -------------------------------------------------------------------------------------                   
 ECHO Program's github: https://github.com/julesontheroad/NSC_BUILDER
 ECHO Blawar's github:  https://github.com/blawar

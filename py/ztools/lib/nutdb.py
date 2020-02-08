@@ -15,6 +15,11 @@ import csv
 import chardet
 from googletrans import Translator
 import ast
+from difflib import SequenceMatcher
+import re
+import listmanager
+import DBmodule as dbmodule
+from datetime import date
 
 # SET ENVIRONMENT
 squirrel_dir=os.path.abspath(os.curdir)
@@ -74,6 +79,7 @@ if os.path.exists(zconfig_dir):
 	urlregions_mirror=os.path.join(zconfig_dir,'NUT_DB_REGIONS_URL_mirror.txt')		
 	if os.path.exists(urlconfig):
 		json_url = get_titlesurl(urlconfig)	
+		json_url_mirror = get_titlesurl(urlconfig_mirror)	
 	else:
 		urlconfig=os.path.join(squirrel_dir,'NUT_DB_URL.txt')
 		urlregions=os.path.join(squirrel_dir,'NUT_DB_REGIONS_URL.txt')	
@@ -85,7 +91,7 @@ if os.path.exists(zconfig_dir):
 				json_url = get_titlesurl(urlconfig)		
 				json_url_mirror = get_titlesurl(urlconfig_mirror)	
 			else:	
-				json_url='https://raw.githubusercontent.com/blawar/titledb/master/titles.US.en.json'
+				json_url='http://tinfoil.media/repo/db/titles.US.en.json'
 				json_url_mirror='https://raw.githubusercontent.com/julesontheroad/titledb/master/titles.US.en.json'				
 		except:
 			if os.path.exists(urlconfig_mirror):	
@@ -103,7 +109,7 @@ else:
 		if os.path.exists(urlconfig):	
 			json_url = get_titlesurl(urlconfig)		
 		else:	
-			json_url='https://raw.githubusercontent.com/blawar/titledb/master/titles.US.en.json'
+			json_url='http://tinfoil.media/repo/db/titles.US.en.json'
 	except:
 		if os.path.exists(urlconfig_mirror):	
 			json_url = get_titlesurl(urlconfig_mirror)		
@@ -113,44 +119,95 @@ else:
 if not os.path.exists(DATABASE_folder):
 	os.makedirs(DATABASE_folder)	
 def getnutdb():
-	response = requests.get(json_url, stream=True)
+	try:
+		response = requests.get(json_url, stream=True)
+	except BaseException as e:
+		Print.error('Exception: ' + str(e))	
 	if '<Response [404]>'!=str(response):
-		if os.path.exists(nutdbfile):
-			try:os.remove(nutdbfile)
-			except:pass			
+		tempfile=nutdbfile[:-4]+'2.json'		
 		try:
-			with open(nutdbfile,'wb') as nutfile:
+			with open(tempfile,'wb') as nutfile:
 				print('Getting NUTDB json')
 				for data in response.iter_content(65536):
 					nutfile.write(data)
 					if not data:
 						break
-		except BaseException as e:
-			Print.error('Exception: ' + str(e))		
-			try:os.remove(nutdbfile)
+			with open(tempfile) as json_file:					
+				data = json.load(json_file)	
+			app_json = json.dumps(data, indent=4)		
+			with open(nutdbfile, 'w') as json_file:
+			  json_file.write(app_json)			
+			try:os.remove(tempfile)
 			except:pass	
-		return True				
-	else:
-		response = requests.get(json_url_mirror, stream=True)
-		if '<Response [404]>'!=str(response):
-			if os.path.exists(nutdbfile):
-				try:os.remove(nutdbfile)
-				except:pass			
+		except:
 			try:
-				with open(nutdbfile,'wb') as nutfile:
-					print('Getting NUTDB json')
+				response = requests.get(json_url_mirror, stream=True)
+			except BaseException as e:
+				Print.error('Exception: ' + str(e))					
+			if '<Response [404]>'!=str(response):
+				tempfile=nutdbfile[:-4]+'2.json'
+				try:
+					with open(tempfile,'wb') as nutfile:
+						print('Error in nutdb origin -> Getting NUTDB json using mirror')
+						for data in response.iter_content(65536):
+							nutfile.write(data)
+							if not data:
+								break
+					with open(tempfile) as json_file:					
+						data = json.load(json_file)				
+					app_json = json.dumps(data, indent=4)		
+					with open(nutdbfile, 'w') as json_file:
+					  json_file.write(app_json)			
+					try:os.remove(tempfile)
+					except:pass
+					return True	
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))		
+					try:os.remove(tempfile)
+					except:pass	
+					os.utime(nutdbfile,(time.time(),time.time()))	
+					print('DB origin is corrupt. Old Files were preserved.')
+					print('The program will retry in the next refresh cicle')
+					return False
+			else:
+				print(json_url)
+				print("Response 404. Old Files weren't removed")
+				os.utime(nutdbfile,(time.time(),time.time()))			
+				return False	
+	else:
+		try:
+			response = requests.get(json_url_mirror, stream=True)
+		except BaseException as e:
+			Print.error('Exception: ' + str(e))	
+		if '<Response [404]>'!=str(response):
+			tempfile=nutdbfile[:-4]+'2.json'			
+			try:
+				with open(tempfile,'wb') as nutfile:
+					print('Error in nutdb origin -> Getting NUTDB json using mirror')
 					for data in response.iter_content(65536):
 						nutfile.write(data)
 						if not data:
 							break
+				with open(tempfile) as json_file:					
+					data = json.load(json_file)				
+				app_json = json.dumps(data, indent=4)		
+				with open(nutdbfile, 'w') as json_file:
+				  json_file.write(app_json)			
+				try:os.remove(tempfile)
+				except:pass
+				return False
 			except BaseException as e:
 				Print.error('Exception: ' + str(e))		
-				try:os.remove(nutdbfile)
+				try:os.remove(tempfile)
 				except:pass	
-			return True			
+				os.utime(nutdbfile,(time.time(),time.time()))	
+				print('DB origin is corrupt. Old Files were preserved.')
+				print('The program will retry in the next refresh cicle')
+				return True			
 		else:
 			print(json_url)
 			print("Response 404. Old Files weren't removed")
+			os.utime(nutdbfile,(time.time(),time.time()))			
 			return False			
 
 def regionurl(region):	
@@ -169,7 +226,10 @@ def regionurl(region):
 				if str(region).lower()==str(row[reg]).lower():
 					url=str(row[weburl])
 					break
-	response = requests.get(url, stream=True)
+	try:
+		response = requests.get(url, stream=True)
+	except BaseException as e:
+		Print.error('Exception: ' + str(e))
 	if '<Response [404]>'!=str(response):
 		return url
 	else:
@@ -290,30 +350,41 @@ def titles_refresh_time():
 				break
 	return th,tm,ts			
 					
-def check_region_file(region):	
+def check_region_file(region,nutdb=True):	
 	try:
 		th,tm,ts=region_refresh_time(region)
 	except:
 		th=24;tm=0;ts=0
 	f='nutdb_'+region+'.json'
+	if nutdb==False:
+		f=region+'.json'		
 	regionfile=os.path.join(DATABASE_folder,f)		
 	if not os.path.exists(regionfile):
-		get_regionDB(region)
-		return True			
+		try:
+			get_regionDB(region)
+			return True		
+		except:
+			return False
 	elif (time.time() - os.path.getmtime(regionfile)) > (th*60*60+tm*60+ts):
-		get_regionDB(region)	
-		return True			
+		try:
+			get_regionDB(region)	
+			return True	
+		except:
+			return False
 	else:
 		try:
 			with open(regionfile) as json_file:
 				pass
 				return 'Refresh time limit not reached'
 		except:
-			get_regionDB(region)	
-			return True
+			try:
+				get_regionDB(region)	
+				return True
+			except:
+				return False
 	return	False							
 			
-def check_other_file(dbfile,dbname):	
+def check_other_file(dbfile,dbname,nutdb=True):	
 	if str(dbname.lower()).endswith('_txt'):
 		ext='.txt'
 		enderf=dbname[:-4]
@@ -325,27 +396,41 @@ def check_other_file(dbfile,dbname):
 	except:
 		th=24;tm=0;ts=0
 	f='nutdb_'+enderf+ext
+	if nutdb==False:
+		f=enderf+ext
 	_dbfile_=os.path.join(DATABASE_folder,f)		
 	if not os.path.exists(_dbfile_):
-		get_otherDB(dbfile,dbname,f)
-		return True
+		try:
+			get_otherDB(dbfile,dbname,f)
+			return True
+		except:
+			return False
 	elif (time.time() - os.path.getmtime(_dbfile_)) > (th*60*60+tm*60+ts):
-		get_otherDB(dbfile,dbname,f)	
-		return True		
+		try:
+			get_otherDB(dbfile,dbname,f)	
+			return True	
+		except:
+			return False
 	else:
 		try:
 			with open(_dbfile_) as json_file:
 				pass
 				return 'Refresh time limit not reached'
 		except:
-			get_otherDB(dbfile,dbname,f)
-			return True
+			try:
+				get_otherDB(dbfile,dbname,f)
+				return True
+			except:
+				return False
 	return	False
 
 def get_otherDB(dbfile,dbname,f):
 	url=get_otherurl(dbfile,dbname)
-	_dbfile_=os.path.join(DATABASE_folder,f)	
-	response = requests.get(url, stream=True)
+	_dbfile_=os.path.join(DATABASE_folder,f)
+	try:
+		response = requests.get(url, stream=True)
+	except BaseException as e:
+		Print.error('Exception: ' + str(e))
 	if '<Response [404]>'!=str(response):	
 		if os.path.exists(_dbfile_):
 			try:os.remove(_dbfile_)
@@ -365,8 +450,11 @@ def get_otherDB(dbfile,dbname,f):
 	else:
 		dbfile_mirror=dbfile[:-4]+'_mirror.txt'
 		url=get_otherurl(dbfile_mirror,dbname)
-		_dbfile_=os.path.join(DATABASE_folder,f)	
-		response = requests.get(url, stream=True)
+		_dbfile_=os.path.join(DATABASE_folder,f)
+		try:
+			response = requests.get(url, stream=True)
+		except BaseException as e:
+			Print.error('Exception: ' + str(e))
 		if '<Response [404]>'!=str(response):	
 			if os.path.exists(_dbfile_):
 				try:os.remove(_dbfile_)
@@ -391,38 +479,78 @@ def get_otherDB(dbfile,dbname,f):
 def get_regionDB(region):
 	url=regionurl(region)
 	f='nutdb_'+region+'.json'
-	regionfile=os.path.join(DATABASE_folder,f)	
-	response = requests.get(url, stream=True)	
+	regionfile=os.path.join(DATABASE_folder,f)
+	try:
+		response = requests.get(url, stream=True)
+	except BaseException as e:
+		Print.error('Exception: ' + str(e))			
 	if '<Response [404]>'!=str(response):	
-		if os.path.exists(regionfile):
-			try:os.remove(regionfile)
-			except:pass	
+		tempfile=regionfile[:-4]+'2.json'			
 		try:
-			with open(regionfile,'wb') as nutfile:
+			with open(tempfile,'wb') as nutfile:
 				print('Getting NUTDB json "'+region+'"')
 				for data in response.iter_content(65536):
 					nutfile.write(data)
 					if not data:
 						break
-		except BaseException as e:
-			Print.error('Exception: ' + str(e))		
-			try:os.remove(regionfile)
-			except:pass	
-		return True	
+			with open(tempfile) as json_file:					
+				data = json.load(json_file)					
+			app_json = json.dumps(data, indent=4)		
+			with open(regionfile, 'w') as json_file:
+			  json_file.write(app_json)				  
+			try:os.remove(tempfile)
+			except:pass							
+		except:
+			url.replace("blawar","julesontheroad")
+			try:
+				response = requests.get(url, stream=True)
+			except BaseException as e:
+				Print.error('Exception: ' + str(e))	
+			if '<Response [404]>'!=str(response):	
+				tempfile=regionfile[:-4]+'2.json'			
+				try:
+					with open(tempfile,'wb') as nutfile:
+						print('Getting NUTDB json "'+region+'"')
+						for data in response.iter_content(65536):
+							nutfile.write(data)
+							if not data:
+								break
+					with open(tempfile) as json_file:					
+						data = json.load(json_file)					
+					app_json = json.dumps(data, indent=4)		
+					with open(regionfile, 'w') as json_file:
+					  json_file.write(app_json)				  
+					try:os.remove(tempfile)
+					except:pass							
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))		
+					try:os.remove(tempfile)
+					except:pass	
+					os.utime(regionfile,(time.time(),time.time()))
+					print('DB origin is corrupt. Old Files were preserved.')
+					print('The program will retry in the next refresh cicle')			
+				return True	
 	else:
 		print(json_url)
 		print("Response 404. Old Files weren't removed")
+		os.utime(regionfile,(time.time(),time.time()))
 		return False		
 		
 def force_refresh():
-	getnutdb()
-	get_regionDB('America')	
-	get_regionDB('Europe')	
-	get_regionDB('Japan')	
-	get_regionDB('Asia')		
-	get_otherDB(urlconfig,'versions_txt','nutdb_versions.txt')
-	get_otherDB(urlconfig,'cheats','nutdb_cheats.json')		
-	return True
+	try:
+		getnutdb()
+		get_regionDB('America')	
+		get_regionDB('Europe')	
+		get_regionDB('Japan')	
+		get_regionDB('Asia')		
+		get_otherDB(urlconfig,'versions_txt','nutdb_versions.txt')
+		get_otherDB(urlconfig,'cheats','nutdb_cheats.json')	
+		get_otherDB(urlconfig,'ninshop','ninshop.json')
+		get_otherDB(urlconfig,'metacritic_id','metacritic_id.json')	
+		get_otherDB(urlconfig,'fw','fw.json')			
+		return True
+	except:
+		return False
 					
 def check_current():	
 	try:
@@ -433,21 +561,30 @@ def check_current():
 		getnutdb()
 		return True			
 	elif (time.time() - os.path.getmtime(nutdbfile)) > (th*60*60+tm*60+ts):
-		getnutdb()		
-		return True			
+		try:
+			getnutdb()		
+			return True		
+		except:
+			return False
 	else:
 		try:
 			with open(nutdbfile) as json_file:
 				pass
 				return 'Refresh time limit not reached'
 		except:
-			getnutdb()	
-			return True
+			try:
+				getnutdb()	
+				return True
+			except:
+				return False
 	return	False	
 	
-def force_update():			
-	getnutdb()
-	return
+def force_update():	
+	try:
+		getnutdb()
+		return True
+	except:
+		return False
 try:	
 	check_current()
 except:pass	
@@ -456,7 +593,7 @@ def get_contentname(titleid,roman=True,format='tabs'):
 	cname=False
 	with open(nutdbfile) as json_file:	
 		data = json.load(json_file)		
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		for i in data:
 			check=False
 			for j,k in data[i].items():
@@ -476,21 +613,63 @@ def get_contentname(titleid,roman=True,format='tabs'):
 		else:pass						
 		if cname==False:
 			return False
-	return 	cname			
+	return 	cname		
 
+def get_metascores(titleid):
+	titleid=str(titleid).lower()	
+	if str(titleid).endswith('000'):
+		baseid=titleid[:-3]+'000'
+	elif str(titleid).endswith('800'):	
+		baseid=titleid[:-3]+'000'
+	else:
+		titleid=str(titleid).lower()
+		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()
+	check_other_file(urlconfig,'metacritic_id',nutdb=False)
+	f='metacritic_id.json'
+	metacritic_json=os.path.join(DATABASE_folder,f)	
+	metascore=False;userscore=False;openscore=False	
+	try:
+		with open(metacritic_json) as json_file:	
+			data = json.load(json_file)		
+			for i in data:
+				try:
+					if str(i).lower()==str(baseid).lower() or str(i).lower()==str(titleid).lower():			
+						for j,k in data[i].items():
+							if str(j) == 'metascore':
+								metascore=k
+							if str(j) == 'userscore':
+								userscore=k			
+							if str(j) == 'openscore':
+								openscore=k											
+						break
+				except:pass			
+	except:pass				
+	if metascore==None:
+		metascore=False
+	else:
+		metascore=str(metascore)
+	if userscore==None:
+		userscore=False
+	else:
+		userscore=str(userscore)	
+	if openscore==None:
+		openscore=False
+	else:
+		openscore=str(openscore)		
+	return 	metascore,userscore,openscore			
 
 def get_contenregions(titleid):
 	baseid=get_baseid(titleid);baseid=baseid.lower()	
 	langue=False
 	rglist=['America','Europe','Japan','Asia']
 	regions=list()
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()	
 	for region in rglist:
 		f='nutdb_'+region+'.json'
@@ -511,13 +690,13 @@ def get_icon(titleid):
 	iconUrl=False
 	rglist=['America','Europe','Japan','Asia']
 	regions=list()
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()	
 	for region in rglist:
 		f='nutdb_'+region+'.json'
@@ -558,7 +737,7 @@ def get_dlcname(titleid,roman=True,format='tabs'):
 	cname=False;basename=False;name=False
 	with open(nutdbfile) as json_file:			
 		data = json.load(json_file)	
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()
 		for i in data:
 			check=False
@@ -621,7 +800,7 @@ def get_dlcData(titleid,roman=True,format='tabs'):
 	cname=False;basename=False;name=False;editor=False		
 	with open(nutdbfile) as json_file:			
 		data = json.load(json_file)		
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()
 		for i in data:
 			dict=data[i]
@@ -684,13 +863,13 @@ def get_dlcData(titleid,roman=True,format='tabs'):
 def get_content_langue(titleid):	
 	langue=False
 	rglist=['America','Europe','Japan','Asia']
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()	
 	for region in rglist:
 		f='nutdb_'+region+'.json'
@@ -866,27 +1045,35 @@ def get_baseid(titleid):
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid)
 	return baseid.upper()	
 		
 def get_content_data(titleid,trans=True):	
 	releaseDate=False;nsuId=False;category=False;ratingContent=False;
 	numberOfPlayers=False;iconUrl=False;screenshots=False;bannerUrl=False
-	intro=False;description=False;rating=False
-	rglist=['America','Europe','Japan','Asia']
-	titleid=titleid.lower()	
+	intro=False;description=False;rating=False;developer=False;
+	productCode=False;OnlinePlay=False;SaveDataCloud=False;playmodes=False;
+	video=False;url=False;
+	rglist=['ninshop','America','Europe','Japan','Asia']
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()	
 	for region in rglist:
-		f='nutdb_'+region+'.json'
+		if region=='ninshop':
+			f=region+'.json'
+		else:
+			f='nutdb_'+region+'.json'
 		regionfile=os.path.join(DATABASE_folder,f)	
-		check_region_file(region)
+		if region=='ninshop':
+			check_other_file(urlconfig,region,nutdb=False)
+		else:	
+			check_region_file(region,nutdb=True)
 		with open(regionfile) as json_file:	
 			data = json.load(json_file)		
 			for i in data:
@@ -904,6 +1091,37 @@ def get_content_data(titleid,trans=True):
 							nsuId=str(dict['nsuId'])
 							if nsuId=='None' or nsuId=='':
 								nsuId=False
+						if 'developer' in dict:
+							developer=str(dict['developer'])
+							if developer=='None' or developer=='':
+								developer=False	
+						else:developer=False		
+						if 'productCode' in dict:
+							productCode=str(dict['productCode'])
+							if productCode=='None' or productCode=='':
+								productCode=False
+						else:
+							productCode=False
+						if 'OnlinePlay' in dict:
+							OnlinePlay=str(dict['OnlinePlay'])
+							if OnlinePlay==True:
+								OnlinePlay='Yes'
+							elif OnlinePlay==False:
+								OnlinePlay='No'							
+							if OnlinePlay=='None' or OnlinePlay=='':
+								OnlinePlay=False
+						else:
+							OnlinePlay=False							
+						if 'SaveDataCloud' in dict:
+							SaveDataCloud=str(dict['SaveDataCloud'])
+							if SaveDataCloud==True:
+								SaveDataCloud='Yes'
+							elif SaveDataCloud==False:
+								SaveDataCloud='No'							
+							if SaveDataCloud=='None' or SaveDataCloud=='':
+								SaveDataCloud=False
+						else:
+							SaveDataCloud=False								
 						if 'category' in dict:
 							category=str(dict['category'])
 							try:	
@@ -935,7 +1153,16 @@ def get_content_data(titleid,trans=True):
 									item=converter.do(item)	
 									item=item[0].upper()+item[1:]
 									romalist.append(item)
-								ratingContent=romalist									
+								ratingContent=romalist	
+						if 'playmodes' in dict:
+							playmodes=str(dict['playmodes'])
+							try:	
+								x = [x.strip() for x in eval(playmodes)]							
+								playmodes=x
+							except:pass	
+							if playmodes=='None' or str((', '.join(playmodes)))=='':
+								playmodes=False		
+						else:playmodes=False	
 						if 'numberOfPlayers' in dict:
 							numberOfPlayers=str(dict['numberOfPlayers'])
 							if numberOfPlayers=='None' or numberOfPlayers=='':
@@ -948,14 +1175,24 @@ def get_content_data(titleid,trans=True):
 							iconUrl=str(dict['iconUrl'])	
 							if iconUrl=='None' or iconUrl=='':
 								iconUrl=False									
+						if 'video' in dict:
+							video=str(dict['video'])	
+							if video=='None' or video=='':
+								video=False	
+						else:video=False		
 						if 'screenshots' in dict:
 							screenshots=str(dict['screenshots'])	
 							if screenshots=='None' or screenshots=='':
-								screenshots=False								
+								screenshots=False									
+						if 'url' in dict:
+							url=str(dict['url'])
+							if url=='None' or url=='':
+								url=False
+						else:url=False		
 						if 'bannerUrl' in dict:
 							bannerUrl=str(dict['bannerUrl'])
 							if bannerUrl=='None' or bannerUrl=='':
-								bannerUrl=False								
+								bannerUrl=False									
 						if 'intro' in dict:
 							intro=str(dict['intro'])
 							if intro=='None' or intro=='':
@@ -999,12 +1236,12 @@ def get_content_data(titleid,trans=True):
 			break
 		if 	nsuId == False and releaseDate == False and category == False:
 			region=False
-	return nsuId,releaseDate,category,ratingContent,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating
+	return nsuId,releaseDate,category,ratingContent,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating,developer,productCode,OnlinePlay,SaveDataCloud,playmodes,video,url
 			
 def get_dlcnsuId(titleid):
 	nsuId=False
 	rglist=['America','Europe','Japan','Asia']
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	for region in rglist:	
 		f='nutdb_'+region+'.json'
 		regionfile=os.path.join(DATABASE_folder,f)	
@@ -1069,13 +1306,13 @@ def get_dlc_baseid(titleid):
 
 def get_content_cheats(titleid,version=False,buildId=False):	
 	cheatID_list=list();
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()	
 	f='nutdb_'+'cheats'+'.json'
 	_dbfile_=os.path.join(DATABASE_folder,f)	
@@ -1113,13 +1350,13 @@ def get_content_cheats(titleid,version=False,buildId=False):
 	
 def BaseID_tree(titleid,printinfo=True):	
 	feed=''
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()		
 	f='nutdb_'+'versions'+'.txt'
 	_dbfile_=os.path.join(DATABASE_folder,f)	
@@ -1164,14 +1401,301 @@ def BaseID_tree(titleid,printinfo=True):
 				else:pass
 	return feed,baselist,updlist,dlclist			
 
+def checkfolder(ofolder,roman=True,printinfo=True):	
+	today = date.today()
+	today=int(today.strftime("%Y%m%d"))
+	# print(str(today))
+	feed=''
+	rglist=['America','Europe','Japan','Asia']
+	
+	filelist=listmanager.folder_to_list(ofolder,extlist=['nsp','nsz','xci','xcz'])
+  
+	# for f in filelist:
+		# print(f)
+	test2="";test=""
+	Datashelve = dbmodule.Dict('File01.dshlv');c=0		
+	for filepath in filelist:
+		try:
+			fileid,fileversion,cctag,nG,nU,nD,baseid=listmanager.parsetags(filepath)
+			# print('[{}] [v{}] [{}]'.format(fileid,fileversion,cctag))
+			if c==0:
+				c+=1
+				try:
+					Datashelve[str(fileid)]=[filepath,fileid,fileversion,cctag,nG,nU,nD,baseid]				
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))							
+			else:
+				try:
+					if str(fileid) in Datashelve:
+						shelvedfile=Datashelve[str(fileid)]
+						#print(shelvedfile[2])
+						if shelvedfile[1]==fileid:
+							if int(shelvedfile[2])>int(fileversion):							
+								Datashelve[str(fileid)]=shelvedfile								
+							elif int(shelvedfile[2])== int(fileversion):								
+								Datashelve[str(fileid)]=shelvedfile	
+							else:										
+								Datashelve[str(fileid)]=[filepath,fileid,fileversion,cctag,nG,nU,nD,baseid]									
+						else:		
+							pass	
+					else:
+						Datashelve[str(fileid)]=[filepath,fileid,fileversion,cctag,nG,nU,nD,baseid]						
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))		
+		except:pass			
+	del filelist	
+
+	f='nutdb_'+'versions'+'.txt'
+	_dbfile_=os.path.join(DATABASE_folder,f)	
+	check_other_file(urlconfig,'versions_txt')
+	missID=list()
+	with open(_dbfile_,'rt',encoding='utf8') as csvfile:
+		readCSV = csv.reader(csvfile, delimiter='|')	
+		i=0	
+		for row in readCSV:
+			if i==0:
+				csvheader=row
+				i=1
+				if 'id' and 'version' in csvheader:
+					id=csvheader.index('id')
+					ver=csvheader.index('version')	
+				else:break	
+			else:	
+				tid=str(row[id]).upper() 
+				if not tid in Datashelve.keys() and tid.endswith('000'):
+					# print(tid)
+					missID.append(tid)
+				# if updid==tid:
+					# v_=str(row[ver])				
+					# return ('v'+str(v_))						
+	counter=len(missID);c=0
+	namedfiles=list();excludefiles=list()
+	with open(nutdbfile) as json_file:	
+		data = json.load(json_file)		
+		for i in data:
+			if c >= counter:
+				break
+			try:	
+				check=False
+				for j,k in data[i].items():
+					if str(j) == 'id':
+						if str(k).upper() in missID and not str(k).upper() in namedfiles:
+							id=str(k).upper()
+							check=True	
+					if str(j) == 'name' and check==True:
+						cname=str(k)
+						if roman == True:
+							converter = kakashi_conv()
+							cname=converter.do(cname)	
+							if cname[0] == ' ':
+								basename=basename[1:]			
+							cname=cname[0].upper()+cname[1:]
+							cname=set_roma_uppercases(cname)		
+							if cname=='None':
+								cname=''
+					if str(j) == 'releaseDate' and check==True:
+						rdate=int(k)
+						if rdate<today:
+							print('{}[{}][v{}]'.format(cname,id,'0'))
+							c+=1	
+							namedfiles.append(id)
+							break
+						else:
+							excludefiles.append(id)
+							c+=1						
+							break				
+			except:
+				c+=1
+				pass
+	for x in missID:
+		if x not in namedfiles and x not in excludefiles:
+			print('[{}][v{}]'.format(x,'0'))
+
+	Datashelve.close()		
+	try:os.remove('File01.dshlv')
+	except:pass			
+	
+def checkfolder_updates(ofolder,roman=True,printinfo=True):	
+	today = date.today()
+	today=int(today.strftime("%Y%m%d"))
+	# print(str(today))
+	feed=''
+	rglist=['America','Europe','Japan','Asia']
+	
+
+	filelist=listmanager.folder_to_list(ofolder,extlist=['nsp','nsz','xci','xcz'])
+
+	# for f in filelist:
+		# print(f)
+	test2="";test=""
+	Datashelve = dbmodule.Dict('File01.dshlv');c=0		
+	for filepath in filelist:
+		try:
+			fileid,fileversion,cctag,nG,nU,nD,baseid=listmanager.parsetags(filepath)
+			# print('[{}] [v{}] [{}]'.format(fileid,fileversion,cctag))
+			if c==0:
+				c+=1
+				try:
+					Datashelve[str(fileid)]=[filepath,fileid,fileversion,cctag,nG,nU,nD,baseid]				
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))							
+			else:
+				try:
+					if str(fileid) in Datashelve:
+						shelvedfile=Datashelve[str(fileid)]
+						#print(shelvedfile[2])
+						if shelvedfile[1]==fileid:
+							if int(shelvedfile[2])>int(fileversion):							
+								Datashelve[str(fileid)]=shelvedfile								
+							elif int(shelvedfile[2])== int(fileversion):								
+								Datashelve[str(fileid)]=shelvedfile	
+							else:										
+								Datashelve[str(fileid)]=[filepath,fileid,fileversion,cctag,nG,nU,nD,baseid]									
+						else:		
+							pass	
+					else:
+						Datashelve[str(fileid)]=[filepath,fileid,fileversion,cctag,nG,nU,nD,baseid]						
+				except BaseException as e:
+					Print.error('Exception: ' + str(e))		
+		except:pass			
+	del filelist	
+
+	# print(Datashelve.keys())
+
+	f='nutdb_'+'versions'+'.txt'
+	_dbfile_=os.path.join(DATABASE_folder,f)	
+	check_other_file(urlconfig,'versions_txt')
+	missID=list()
+	with open(_dbfile_,'rt',encoding='utf8') as csvfile:
+		readCSV = csv.reader(csvfile, delimiter='|')	
+		i=0	
+		for row in readCSV:
+			if i==0:
+				csvheader=row
+				i=1
+				if 'id' and 'version' in csvheader:
+					id=csvheader.index('id')
+					ver=csvheader.index('version')	
+				else:break	
+			else:	
+				try:
+					tid=str(row[id]).upper() 
+					if tid.endswith('800'):
+						btid=tid[:-3]+'000'
+					else:
+						btid=tid
+					if (tid in Datashelve.keys() or btid in Datashelve.keys()) and tid.endswith('800'):
+						# print(tid)
+						try:
+							data=Datashelve[tid]
+						except:
+							data=Datashelve[btid]
+						v_=str(row[ver])
+						# print(v_)
+						# print(data[2])
+						# print('..')
+						if int(v_)>int(data[2]):		
+
+							missID.append([tid,v_])				
+
+				except:pass
+	# print(missID)
+	for t,v in missID:
+		print('[{}][v{}]'.format(t,v))
+	# counter=len(missID);c=0
+	# namedfiles=list();excludefiles=list()
+	# with open(nutdbfile) as json_file:	
+		# data = json.load(json_file)		
+		# for i in data:
+			# if c >= counter:
+				# break
+			# try:	
+				# check=False
+				# for j,k in data[i].items():
+					# if str(j) == 'id':
+						# if str(k).upper() in missID and not str(k).upper() in namedfiles:
+							# id=str(k).upper()
+							# check=True	
+					# if str(j) == 'name' and check==True:
+						# cname=str(k)
+						# if roman == True:
+							# converter = kakashi_conv()
+							# cname=converter.do(cname)	
+							# if cname[0] == ' ':
+								# basename=basename[1:]			
+							# cname=cname[0].upper()+cname[1:]
+							# cname=set_roma_uppercases(cname)		
+							# if cname=='None':
+								# cname=''
+					# if str(j) == 'releaseDate' and check==True:
+						# rdate=int(k)
+						# if rdate<today:
+							# print('{}[{}][v{}]'.format(cname,id,'0'))
+							# c+=1	
+							# namedfiles.append(id)
+							# break
+						# else:
+							# excludefiles.append(id)
+							# c+=1						
+							# break				
+			# except:
+				# c+=1
+				# pass
+	# for x in missID:
+		# if x not in namedfiles and x not in excludefiles:
+			# print('[{}][v{}]'.format(x,'0'))
+
+	Datashelve.close()		
+	try:os.remove('File01.dshlv')
+	except:pass			
+
+def getupcoming(roman=True,printinfo=True):	
+	today = date.today()
+	today=int(today.strftime("%Y%m%d"))
+	# print(str(today))
+	namedfiles=list();
+	with open(nutdbfile) as json_file:	
+		data = json.load(json_file)		
+		for i in data:
+			try:	
+				check=False
+				for j,k in data[i].items():
+					if str(j) == 'id':
+						if str(k).upper() not in namedfiles:
+							id=str(k).upper()
+							check=True	
+					if str(j) == 'name' and check==True:
+						cname=str(k)
+						if roman == True:
+							converter = kakashi_conv()
+							cname=converter.do(cname)	
+							if cname[0] == ' ':
+								basename=basename[1:]			
+							cname=cname[0].upper()+cname[1:]
+							cname=set_roma_uppercases(cname)		
+							if cname=='None':
+								cname=''
+					if str(j) == 'releaseDate' and check==True:
+						rdate=int(k)
+						if rdate>today:
+							b=str(rdate)
+							releaseDate=b[6:]+'/'+b[4:6]+'/'+b[:4]
+							print('{}: {}[{}][v{}]'.format(releaseDate,cname,id,'0'))
+							namedfiles.append(id)
+							break
+						else:				
+							break				
+			except:
+				pass
+
 def latest_upd(titleid):	
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	if str(titleid).endswith('000'):
 		baseid=titleid[:-3]+'000'
 	elif str(titleid).endswith('800'):	
 		baseid=titleid[:-3]+'000'
 	else:
-		titleid=titleid.lower()
+		titleid=str(titleid).lower()
 		baseid=get_dlc_baseid(titleid);baseid=baseid.lower()
 	updid=baseid[:-3]+'800'
 	f='nutdb_'+'versions'+'.txt'
@@ -1196,7 +1720,7 @@ def latest_upd(titleid):
 					return ('v'+str(v_))
 
 def latest_ver(titleid):	
-	titleid=titleid.lower()	
+	titleid=str(titleid).lower()	
 	f='nutdb_'+'versions'+'.txt'
 	_dbfile_=os.path.join(DATABASE_folder,f)	
 	check_other_file(urlconfig,'versions_txt')
@@ -1270,5 +1794,4 @@ def kakashi_conv():
 	kakasi.setMode("C", False)
 	converter = kakasi.getConverter()	
 	return converter
-		
-		
+	

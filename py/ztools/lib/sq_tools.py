@@ -41,10 +41,12 @@ versions =
 	536936448: "8.0.1"    ->   keygeneration = 8	
 	537919488: "8.1.0"    ->   keygeneration = 9
 	603979776: "9.0.0"    ->   keygeneration = 10	
-	604045312: "9.0.1"    ->   keygeneration = 10			
+	604045312: "9.0.1"    ->   keygeneration = 10
+	605028352: "9.1.0"    ->   keygeneration = 11	
 '''	
-def kgstring(kg=list()):
+def kgstring():
 	kg=list()
+	kg11=[605028352];kg.append(kg11)		
 	kg10=[603979776,604045312];kg.append(kg10)		
 	kg9=[537919488];kg.append(kg9)		
 	kg8=[536936448,536870912,469827584,469762048];kg.append(kg8)	
@@ -86,7 +88,9 @@ def getTopRSV(keygeneration, RSV):
 	if keygeneration == 9:
 		return 537919488		
 	if keygeneration == 10:
-		return 603979776			
+		return 603979776
+	if keygeneration == 11:
+		return 605028352		
 	else:
 		return RSV
 
@@ -121,6 +125,9 @@ def getMinRSV(keygeneration, RSV):
 		return RSV	
 	if keygeneration == 10:
 		RSV=9*67108864
+		return RSV	
+	if keygeneration == 11:
+		RSV=9*67108864+1*1048576
 		return RSV				
 	else:
 		return RSV		
@@ -147,7 +154,9 @@ def getFWRangeKG(keygeneration):
 	if keygeneration == 9:
 		return "(8.1.0)"	
 	if keygeneration == 10:
-		return "(9.0.0 - >9.0.0)"				
+		return "(9.0.0 - 9.0.1)"
+	if keygeneration == 11:
+		return "(9.0.0 - >9.1.0)"		
 	else:
 		return "UNKNOWN"		
 
@@ -464,6 +473,10 @@ def verify_nkeys(fileName):
 	if 'master_key_09' not in checkkeys:
 		print("master_key_09 is Missing")
 	else:
+		counter+=1		
+	if 'master_key_10' not in checkkeys and 'master_key_0a' not in checkkeys:
+		print("master_key_10|master_key_0a is Missing")
+	else:
 		counter+=1				
 		
 	if 'header_key' not in checkkeys:
@@ -662,7 +675,18 @@ def verify_nkeys(fileName):
 				print(tabs+'> Key is valid!!!')
 			else:
 				print(tabs+'> Key is invalid!!! -> PLEASE CHECK YOUR KEYS.TXT!!!')			
-			print('')				
+			print('')	
+
+		if i == 'master_key_10' or i == 'master_key_0a':
+			master_key_10=checkkeys[i][:]
+			print('master_key_10|master_key_0a: '+master_key_10)
+			sha=sha256(uhx(master_key_10)).hexdigest()
+			print('  > HEX SHA256: '+sha)	
+			if sha == '4ec5a237a75a083a9c5f6cf615601522a7f822d06bd4ba32612c9cebbb29bd45':
+				print(tabs+'> Key is valid!!!')
+			else:
+				print(tabs+'> Key is invalid!!! -> PLEASE CHECK YOUR KEYS.TXT!!!')			
+			print('')					
 
 		if i == 'header_key':
 			header_key=checkkeys[i][:]
@@ -793,6 +817,13 @@ def verify_nkeys_startup(fileName):
 		startup=True		
 	else:
 		counter+=1
+	if 'master_key_10' not in checkkeys and 'master_key_0a' not in checkkeys:
+		print("master_key_10|master_key_0a is Missing!!!")
+		print("The program won't be able to decrypt games content that uses this key")
+		print("This key represents FW 9.1 requirement")
+		startup=True		
+	else:
+		counter+=1		
 		
 	if 'header_key' not in checkkeys:
 		print("header_key is Missing")	
@@ -962,7 +993,7 @@ def verify_nkeys_startup(fileName):
 			master_key_08=checkkeys[i][:]
 			sha=sha256(uhx(master_key_08)).hexdigest()
 			if sha != '2998e2e23609bc2675ff062a2d64af5b1b78dff463b24119d64a1b64f01b2d51':
-				print('master_key_07: '+aes_kek_generation_source )	
+				print('master_key_08: '+aes_kek_generation_source )	
 				print('  > HEX SHA256: '+sha)
 				print(tabs+'> Key is invalid!!! -> PLEASE CHECK YOUR KEYS.TXT!!!')		
 				startup=True				
@@ -972,11 +1003,21 @@ def verify_nkeys_startup(fileName):
 			master_key_09=checkkeys[i][:]
 			sha=sha256(uhx(master_key_09)).hexdigest()
 			if sha != '9d486a98067c44b37cf173d3bf577891eb6081ff6b4a166347d9dbbf7025076b':
-				print('master_key_07: '+aes_kek_generation_source )	
+				print('master_key_09: '+aes_kek_generation_source )	
 				print('  > HEX SHA256: '+sha)
 				print(tabs+'> Key is invalid!!! -> PLEASE CHECK YOUR KEYS.TXT!!!')		
 				startup=True				
-			print('')					
+			print('')	
+
+		if (i == 'master_key_10' or i=='master_key_0a'):
+			master_key_10=checkkeys[i][:]
+			sha=sha256(uhx(master_key_10)).hexdigest()
+			if sha != '4ec5a237a75a083a9c5f6cf615601522a7f822d06bd4ba32612c9cebbb29bd45':
+				print('master_key_10|master_key_0a: '+aes_kek_generation_source )	
+				print('  > HEX SHA256: '+sha)
+				print(tabs+'> Key is invalid!!! -> PLEASE CHECK YOUR KEYS.TXT!!!')		
+				startup=True				
+			print('')						
 
 		if i == 'header_key':
 			header_key=checkkeys[i][:]
@@ -1172,11 +1213,12 @@ def get_xciheader(oflist,osizelist,sec_hashlist):
 
 	return header,enc_info,sig_padding,fake_CERT,root_header,upd_header,norm_header,sec_header,rootSize,upd_multiplier,norm_multiplier,sec_multiplier
 
-def ret_nsp_offsets(filepath):
+def ret_nsp_offsets(filepath,kbsize=8):
+	kbsize=int(kbsize)
 	files_list=list()
 	try:
 		with open(filepath, 'r+b') as f:			
-			data=f.read(int(8*1024))						
+			data=f.read(int(kbsize*1024))						
 		try:
 			head=data[0:4]
 			n_files=(data[4:8])
@@ -1219,7 +1261,8 @@ def ret_nsp_offsets(filepath):
 		Print.error('Exception: ' + str(e))
 	return	files_list
 
-def ret_xci_offsets(filepath):
+def ret_xci_offsets(filepath,kbsize=8):
+	kbsize=int(kbsize)
 	files_list=list()
 	try:		
 		with open(filepath, 'r+b') as f:
@@ -1235,7 +1278,7 @@ def ret_xci_offsets(filepath):
 				secureOffset=secureOffset*0x200
 				with open(filepath, 'r+b') as f:	
 					f.seek(secureOffset)
-					data=f.read(int(8*1024))
+					data=f.read(int(kbsize*1024))
 					rawhead = io.BytesIO(data)
 				rmagic=rawhead.read(0x4)
 				if rmagic==b'HFS0':
@@ -1283,10 +1326,128 @@ def ret_xci_offsets(filepath):
 		Print.error('Exception: ' + str(e))
 	return files_list
 
+def ret_xci_offsets_fw(filepath,partition='update',kbsize=32):
+	kbsize=int(kbsize)
+	files_list=list()
+	try:		
+		with open(filepath, 'r+b') as f:
+			rawhead = io.BytesIO(f.read(int(0x200)))
+			data=rawhead.read()
+			#print(hx(data))
+		try:			
+			rawhead.seek(0x100)
+			magic=rawhead.read(0x4)
+			if magic==b'HEAD':
+				#print(magic)
+				HFS0_offset=0xF000
+				with open(filepath, 'r+b') as f:	
+					f.seek(HFS0_offset)
+					data=f.read(int(8*1024))
+					rawhead = io.BytesIO(data)
+				rmagic=rawhead.read(0x4)
+				if rmagic==b'HFS0':
+					#print(rmagic)
+					head=data[0:4]
+					n_files=(data[4:8])
+					n_files=int.from_bytes(n_files, byteorder='little')		
+					st_size=(data[8:12])
+					st_size=int.from_bytes(st_size, byteorder='little')		
+					junk=(data[12:16])
+					offset=(0x10 + n_files * 0x40)
+					stringTable=(data[offset:offset+st_size])
+					stringEndOffset = st_size
+					headerSize = 0x10 + 0x40 * n_files + st_size
+					# print(head)
+					# print(str(n_files))
+					# print(str(st_size))	
+					# print(str((stringTable)))
+					for i in range(n_files):
+						i = n_files - i - 1
+						pos=0x10 + i * 0x40
+						offset = data[pos:pos+8]
+						offset=int.from_bytes(offset, byteorder='little')			
+						size = data[pos+8:pos+16]
+						size=int.from_bytes(size, byteorder='little')			
+						nameOffset = data[pos+16:pos+20] # just the offset
+						nameOffset=int.from_bytes(nameOffset, byteorder='little')			
+						name = stringTable[nameOffset:stringEndOffset].decode('utf-8').rstrip(' \t\r\n\0')
+						stringEndOffset = nameOffset
+						junk2 = data[pos+20:pos+24] # junk data
+						#print(name)
+						#print(offset)	
+						#print(size)	
+						off1=offset+headerSize+HFS0_offset
+						off2=off1+size
+						files_list.append([name,off1,off2,size])	
+						# with open(filename, 'r+b') as f:	
+							# f.seek(off1)
+							# print(f.read(0x4))
+					files_list.reverse()
+					# print(files_list)
+					updoffset=False
+					for file in files_list:
+						if file[0]==str(partition).lower():
+							updoffset=file[1]
+							break
+					files_list=list()		
+					if updoffset!=False:	
+						with open(filepath, 'r+b') as f:	
+							f.seek(updoffset)
+							data=f.read(int(kbsize*1024))
+							rawhead = io.BytesIO(data)
+						a=rawhead.read()
+						# Hex.dump(a)
+						rawhead.seek(0)
+						rmagic=rawhead.read(0x4)	
+						if rmagic==b'HFS0':
+							#print(rmagic)
+							head=data[0:4]
+							n_files=(data[4:8])
+							n_files=int.from_bytes(n_files, byteorder='little')		
+							st_size=(data[8:12])
+							st_size=int.from_bytes(st_size, byteorder='little')		
+							junk=(data[12:16])
+							offset=(0x10 + n_files * 0x40)
+							stringTable=(data[offset:offset+st_size])
+							stringEndOffset = st_size
+							headerSize = 0x10 + 0x40 * n_files + st_size
+							# print(head)
+							# print(str(n_files))
+							# print(str(st_size))	
+							# print(str((stringTable)))
+							for i in range(n_files):
+								i = n_files - i - 1
+								pos=0x10 + i * 0x40
+								offset = data[pos:pos+8]
+								offset=int.from_bytes(offset, byteorder='little')			
+								size = data[pos+8:pos+16]
+								size=int.from_bytes(size, byteorder='little')			
+								nameOffset = data[pos+16:pos+20] # just the offset
+								nameOffset=int.from_bytes(nameOffset, byteorder='little')			
+								name = stringTable[nameOffset:stringEndOffset].decode('utf-8').rstrip(' \t\r\n\0')
+								stringEndOffset = nameOffset
+								junk2 = data[pos+20:pos+24] # junk data
+								#print(name)
+								#print(offset)	
+								#print(size)	
+								off1=offset+headerSize+HFS0_offset
+								off2=off1+size
+								files_list.append([name,off1,off2,size])	
+								# with open(filename, 'r+b') as f:	
+									# f.seek(off1)
+									# print(f.read(0x4))
+							files_list.reverse()	
+							# print(files_list)							
+		except BaseException as e:
+			Print.error('Exception: ' + str(e))					
+	except BaseException as e:
+		Print.error('Exception: ' + str(e))
+	return files_list	
+
 def count_content(filepath):
 	counter=0
 	if filepath.endswith('.nsp')or filepath.endswith('.nsx') or filepath.endswith('.nsz'):
-		files_listz=ret_nsp_offsets(filepath)
+		files_list=ret_nsp_offsets(filepath)
 	elif filepath.endswith('.xci') or filepath.endswith('.xcz'):	
 		files_list=ret_xci_offsets(filepath)
 	for i in range(len(files_list)):
@@ -1332,3 +1493,93 @@ def cnmt_type(type_n):
 	if str(hx(type_n)) == "b'83'":
 		ctype='Delta'
 	return ctype		
+	
+def file_real_size(filepath):
+	if filepath.endswith('.nsp')or filepath.endswith('.nsx') or filepath.endswith('.nsz'):
+		files_list=ret_nsp_offsets(filepath)
+	elif filepath.endswith('.xci') or filepath.endswith('.xcz'):	
+		files_list=ret_xci_offsets(filepath)
+	last_file=files_list[-1]
+	realsize=last_file[2]
+	return realsize	
+
+def check_if_trimmed(filepath):	
+	realsize=file_real_size(filepath)
+	size=os.path.getsize(filepath)
+	if size==realsize:
+		return True,realsize
+	else:
+		return False,realsize
+		
+def check_if_foot_signed(filepath,realsize,cryptokey=None):
+	with open(filepath, 'rb') as o:
+		o.seek(realsize)
+		if o.read(6)==b'FOOTER':
+			return True
+		else:
+			return False
+		
+def add_signed_footer(filepath,message=None,rewrite=False,encrypted=None,cryptokey=None):
+	result,realsize=check_if_trimmed(filepath)	
+	if result==False and rewrite==False:
+		result2=check_if_foot_signed(filepath,realsize)
+		if result2==True:
+			print(filepath+' is already signed')
+			return True
+	if message==None:
+		message='Made with NSCB'
+	if encrypted==None:
+		crypto=(0x0).to_bytes(4, byteorder='little')
+	else:
+		crypto=(0x1).to_bytes(4, byteorder='little')
+	mss=message.encode(encoding='UTF-8')
+	footer =  b''		
+	footer += b'FOOTER'
+	footer += crypto
+	footer += (len(mss)).to_bytes(4, byteorder='little')
+	footer += mss
+	with open(filepath, 'rb+') as o:
+		o.seek(realsize)	
+		o.write(footer)
+		o.seek(0, os.SEEK_END)
+		curr_off= o.tell()
+		remainder=curr_off%0x10
+		if remainder!=0:
+			while remainder!=0:
+				padd = b''
+				padd += (0x00).to_bytes(1, byteorder='little')
+				o.write(padd)
+				o.seek(0, os.SEEK_END)
+				curr_off= o.tell()
+				remainder=curr_off%0x10				
+		print('Added message: "{}" to {}'.format(message,filepath))			
+		
+def read_footer(filepath,cryptokey=None):
+	result,realsize=check_if_trimmed(filepath)	
+	if result==True:
+		print(filepath+" doesn't have a footer")
+	else:
+		with open(filepath, 'rb') as o:
+			o.seek(realsize)
+			if o.read(0x6)==b'FOOTER':
+				crypto=o.read(0x4)
+				footsize=int.from_bytes(o.read(0x4), byteorder='little', signed=False)
+				print(filepath)
+				print(' -> '+((o.read(footsize)).decode(encoding='UTF-8')))
+			else:
+				print(filepath)	
+				print(" -> doesn't have a footer")	
+
+def delete_footer(filepath,cryptokey=None):
+	result,realsize=check_if_trimmed(filepath)	
+	if result==True:
+		print(filepath+" doesn't have a footer")
+	else:
+		with open(filepath, 'rb+') as o:
+			o.seek(realsize)
+			if o.read(0x6)==b'FOOTER':
+				o.seek(realsize)
+				o.truncate()
+				print("Footer has been deleted from "+filepath)	
+			else:
+				print(filepath+" doesn't have a footer")					

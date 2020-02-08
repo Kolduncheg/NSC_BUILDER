@@ -1211,7 +1211,20 @@ class ChromeXci(File):
 											break
 								break	
 		if iscorrect==False:
-			ModuleId='';BuildID8='';BuildID16='';
+			try:
+				from nutFS.Nca import Nca as nca3type
+				for nspF in self.hfs0:
+					if str(nspF._path)=="secure":
+						for nca in nspF:										
+							if type(nca) == Fs.Nca:
+								if 	str(nca.header.contentType) == 'Content.PROGRAM':
+									nca3type=Nca(nca)
+									nca3type._path=nca._path							
+									ModuleId=str(nca3type.buildId)
+									BuildID8=ModuleId[:8]
+									BuildID16=ModuleId[:16]
+			except:
+				ModuleId='';BuildID8='';BuildID16='';
 		return ModuleId,BuildID8,BuildID16									
 																		
 	def copy_as_plaintext(self,ofolder,files_list,buffer=32768):
@@ -2292,7 +2305,9 @@ class ChromeXci(File):
 											message=["Supported Languages:",suplangue];feed=self.html_feed(feed,3,message)
 									feed+='</ul>'	
 									feed=self.html_feed(feed,2,message=str("- Required Firmware:"))	
-									feed+='<ul style="margin-bottom: 2px;margin-top: 3px">'								
+									incl_Firm=DBmodule.FWDB.detect_xci_fw(self._path,False)									
+									feed+='<ul style="margin-bottom: 2px;margin-top: 3px">'	
+									message=["Included Firmware:",str(str(incl_Firm))];feed=self.html_feed(feed,3,message)									
 									if content_type_cnmt == 'AddOnContent':
 										if v_number == 0:
 											message=["Required game version:",str(str(min_sversion)+' -> '+"Application"+' ('+str(RS_number)+')')];feed=self.html_feed(feed,3,message)									
@@ -2802,7 +2817,7 @@ class ChromeXci(File):
 										if isdemo == 2:
 											content_type='RetailInteractiveDisplay'	
 									programSDKversion,dataSDKversion=self.getsdkvertit(titleid2)
-									nsuId,releaseDate,category,ratingContent,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating=nutdb.get_content_data(titleid2,trans)
+									nsuId,releaseDate,category,ratingContent,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating,developer,productCode,OnlinePlay,SaveDataCloud,playmodes,video,shopurl=nutdb.get_content_data(titleid2,trans)
 									sdkversion=nca.get_sdkversion()						
 									message=('-----------------------------');feed+=message+'\n'								
 									message=('CONTENT ID: ' + str(titleid2));feed+=message+'\n'	
@@ -8135,9 +8150,11 @@ class ChromeXci(File):
 			DBdict['DistEshop']='-'
 			DBdict['DistCard']='True'
 			
-		# #xci flags		
-		# DBdict['FWoncard']='-'			
-		# DBdict['multicontentCardname']='-'		
+		#xci flags		
+		DBdict['FWoncard']='-'
+		try:
+			DBdict['FWoncard']=DBmodule.FWDB.detect_xci_fw(self._path)
+		except:pass
 		
 		GCFlag=(str(hx(self.gamecardSize))[2:-1]).upper()
 		valid_data=int(((self.validDataEndOffset+0x1)*0x200))
@@ -8171,10 +8188,10 @@ class ChromeXci(File):
 		DBdict['intro']='-'			
 		DBdict['description']='-'			
 		if ctype=='GAME' or ctype=='DLC' or ctype=='DEMO':	
-			nsuId,worldreleasedate,genretags,ratingtags,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating=nutdb.get_content_data(titleid,trans)
+			nsuId,worldreleasedate,genretags,ratingtags,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating,developer,productCode,OnlinePlay,SaveDataCloud,playmodes,video,shopurl=nutdb.get_content_data(titleid,trans)
 			regions=nutdb.get_contenregions(titleid)
 		else:
-			nsuId,worldreleasedate,genretags,ratingtags,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating=nutdb.get_content_data(base_ID,trans)
+			nsuId,worldreleasedate,genretags,ratingtags,numberOfPlayers,intro,description,iconUrl,screenshots,bannerUrl,region,rating,developer,productCode,OnlinePlay,SaveDataCloud,playmodes,video,shopurl=nutdb.get_content_data(base_ID,trans)
 			regions=nutdb.get_contenregions(base_ID)		
 		if 	nsuId!=False:
 			DBdict['nsuId']=nsuId
@@ -8198,8 +8215,32 @@ class ChromeXci(File):
 			DBdict['description']=description		
 		if 	rating!=False:	
 			DBdict['eshoprating']=rating	
+		if 	developer!=False:	
+			DBdict['developer']=developer	
+		if 	productCode!=False:	
+			DBdict['productCode']=productCode	
+		if 	OnlinePlay!=False:	
+			DBdict['OnlinePlay']=OnlinePlay	
+		if 	SaveDataCloud!=False:	
+			DBdict['SaveDataCloud']=SaveDataCloud
+		if 	playmodes!=False:	
+			DBdict['playmodes']=playmodes
+		if 	video!=False:	
+			DBdict['video']=video
+		if 	shopurl!=False:	
+			DBdict['shopurl']=shopurl				
 		if 	len(regions)>0:	
-			DBdict['regions']=regions					
+			DBdict['regions']=regions	
+		metascore,userscore,openscore=nutdb.get_metascores(titleid)	
+		DBdict['metascore']='-'				
+		DBdict['userscore']='-'	
+		DBdict['openscore']='-'			
+		if 	metascore!=False:	
+			DBdict['metascore']=metascore			
+		if 	userscore!=False:	
+			DBdict['userscore']=userscore	
+		if 	openscore!=False:	
+			DBdict['openscore']=openscore				
 		return DBdict
 
 	def DB_get_names_from_nutdb(self,titleid):
